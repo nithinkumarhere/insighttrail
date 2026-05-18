@@ -1,4 +1,4 @@
-from flask import Flask, request, g, jsonify, render_template, Blueprint
+from flask import request, g, jsonify, render_template, Blueprint
 import time
 import os
 import json
@@ -7,15 +7,14 @@ from .metrics import record_metrics, get_metrics
 from .traces import trace_request
 import pkg_resources
 import requests
-import traceback
-import sys
-import uuid
 from datetime import datetime
-from werkzeug.wrappers import Request
 
 class InsightTrailMiddleware:
     def __init__(self, app, log_file=None, log_level='INFO', max_file_size=1 * 1024 * 1024, backup_count=5,
-                 enable_ui=True, url_prefix='/insight'):
+                 enable_ui=True, url_prefix='/insight', capture_runtime=False,
+                 capture_system_metrics=False, capture_env_vars=False, env_allowlist=None,
+                 dependency_check=None, ultra_light_mode=False, enable_charts=None,
+                 ui_refresh_seconds=10, track_internal_requests=False):
         """
         Initialize InsightTrail middleware.
 
@@ -29,6 +28,16 @@ class InsightTrailMiddleware:
             url_prefix: URL prefix for InsightTrail routes (default: /insight)
         """
         self.app = app
+        self.capture_runtime = capture_runtime
+        self.capture_system_metrics = capture_system_metrics
+        self.capture_env_vars = capture_env_vars
+        self.env_allowlist = env_allowlist or []
+        self.url_prefix = '/' + url_prefix.strip('/') if url_prefix else '/insight'
+        self.track_internal_requests = track_internal_requests
+        self.ultra_light_mode = ultra_light_mode
+        self.dependency_check = (not ultra_light_mode) if dependency_check is None else dependency_check
+        self.enable_charts = (not ultra_light_mode) if enable_charts is None else enable_charts
+        self.ui_refresh_seconds = max(2, int(ui_refresh_seconds))
         self.required_packages = self._load_required_packages(app.root_path)
         
         if log_file is None:
@@ -41,7 +50,7 @@ class InsightTrailMiddleware:
         self._init_app(app)
 
         if enable_ui:
-            self._setup_ui(url_prefix)
+            self._setup_ui(self.url_prefix)
 
     def _load_required_packages(self, start_path):
         """
@@ -89,23 +98,28 @@ class InsightTrailMiddleware:
         for dist in pkg_resources.working_set:
             try:
                 # Get package metadata
+                is_prerelease = any(tag in dist.version.lower() for tag in ('a', 'b', 'rc', 'dev', 'alpha', 'beta'))
                 package = {
                     'name': dist.key,
                     'current_version': dist.version,
                     'latest_version': dist.version,  # Will be updated if PyPI info is available
                     'required': dist.key.lower() in required_set,
-                    'description': dist._get_metadata('Summary') if dist.has_metadata('Summary') else None
+                    'description': dist._get_metadata('Summary') if dist.has_metadata('Summary') else None,
+                    'stability': 'pre-release' if is_prerelease else 'stable'
                 }
 
                 # Try to get latest version from PyPI
                 try:
                     pypi_url = f"https://pypi.org/pypi/{dist.key}/json"
-                    response = requests.get(pypi_url, timeout=2)
-                    if response.status_code == 200:
-                        pypi_data = response.json()
-                        package['latest_version'] = pypi_data['info']['version']
-                        if not package['description']:
-                            package['description'] = pypi_data['info']['summary']
+                    if self.dependency_check:
+                        response = requests.get(pypi_url, timeout=2)
+                        if response.status_code == 200:
+                            pypi_data = response.json()
+                            package['latest_version'] = pypi_data['info']['version']
+                            if not package['description']:
+                                package['description'] = pypi_data['info']['summary']
+                            latest = str(package['latest_version']).lower()
+                            package['stability'] = 'pre-release' if any(tag in latest for tag in ('a', 'b', 'rc', 'dev', 'alpha', 'beta')) else 'stable'
                 except (requests.RequestException, KeyError, ValueError):
                     pass
 
@@ -124,16 +138,36 @@ class InsightTrailMiddleware:
 
         @app.after_request
         def after_request(response):
+            if not self.track_internal_requests and request.path.startswith(self.url_prefix):
+                return response
             duration = time.time() - g.start_time
             record_metrics(request, response, duration)
-            log_request(request, response, duration)
+            log_request(
+                request,
+                response,
+                duration,
+                capture_runtime=self.capture_runtime,
+                capture_system_metrics=self.capture_system_metrics,
+                capture_env_vars=self.capture_env_vars,
+                env_allowlist=self.env_allowlist,
+            )
             return response
 
         @app.teardown_request
         def teardown_request(exception=None):
             if exception is not None:
+                if not self.track_internal_requests and request.path.startswith(self.url_prefix):
+                    return
                 duration = time.time() - g.start_time
-                log_error(request, exception, duration)
+                log_error(
+                    request,
+                    exception,
+                    duration,
+                    capture_runtime=self.capture_runtime,
+                    capture_system_metrics=self.capture_system_metrics,
+                    capture_env_vars=self.capture_env_vars,
+                    env_allowlist=self.env_allowlist,
+                )
 
     def _parse_log_file(self):
         logs = []
@@ -156,16 +190,22 @@ class InsightTrailMiddleware:
             print(f"Error reading log file: {e}")
             return []
 
-    def _setup_ui(self, url_prefix):
+    def _setup_ui(self, normalized_prefix):
         # Create a blueprint for InsightTrail UI
         insight_bp = Blueprint('insighttrail', __name__,
                                template_folder='templates',
                                static_folder='static',
-                               url_prefix=url_prefix)
+                               url_prefix=normalized_prefix)
 
         @insight_bp.route('/')
         def index():
-            return render_template("index.html")
+            return render_template(
+                "insighttrail_dashboard.html",
+                insight_base_url=normalized_prefix,
+                ui_refresh_seconds=self.ui_refresh_seconds,
+                enable_charts=self.enable_charts,
+                dependency_check=self.dependency_check,
+            )
 
         @insight_bp.route('/api/packages')
         def get_packages():
@@ -212,155 +252,3 @@ class InsightTrailMiddleware:
         # Register the blueprint with the main app
         self.app.register_blueprint(insight_bp)
 
-    def _get_code_context(self, filename, line_number, context_lines=5):
-        """Get the code context around the error line."""
-        try:
-            if not os.path.exists(filename):
-                return None
-
-            with open(filename, 'r', encoding='utf-8') as file:
-                lines = file.readlines()
-                
-            start = max(0, line_number - context_lines - 1)
-            end = min(len(lines), line_number + context_lines)
-            
-            return {
-                'lines': [line.rstrip('\n') for line in lines[start:end]],
-                'start_line': start + 1,
-                'error_line': line_number,
-                'filename': filename
-            }
-        except Exception as e:
-            print(f"Error getting code context: {e}")
-            return None
-
-    def _log_error(self, error, request=None):
-        """Log an error with full traceback and context."""
-        frames = []
-        tb = error.__traceback__
-        
-        while tb is not None:
-            filename = tb.tb_frame.f_code.co_filename
-            function = tb.tb_frame.f_code.co_name
-            line_number = tb.tb_lineno
-            
-            # Get code context for this frame
-            context = self._get_code_context(filename, line_number)
-            
-            # Get local variables (excluding special vars and functions)
-            local_vars = {}
-            for key, value in tb.tb_frame.f_locals.items():
-                if not key.startswith('__') and not callable(value):
-                    try:
-                        # Try to convert value to string, fallback to type name if fails
-                        local_vars[key] = str(value)
-                    except:
-                        local_vars[key] = f"<{type(value).__name__}>"
-
-            frame_info = {
-                'filename': filename,
-                'function': function,
-                'line': line_number,
-                'context': context,
-                'locals': local_vars
-            }
-            frames.append(frame_info)
-            tb = tb.tb_next
-
-        error_info = {
-            'type': error.__class__.__name__,
-            'message': str(error),
-            'frames': frames,
-            'traceback': ''.join(traceback.format_exception(type(error), error, error.__traceback__)),
-            'context': {
-                'module': getattr(error, '__module__', 'unknown'),
-                'doc': getattr(error, '__doc__', None),
-                'args': getattr(error, 'args', None),
-            }
-        }
-
-        if request:
-            error_info['context'].update({
-                'url': request.path,
-                'method': request.method,
-                'headers': dict(request.headers),
-                'params': dict(request.args)
-            })
-
-        return error_info
-
-    def __call__(self, environ, start_response):
-        """WSGI middleware entry point."""
-        request = Request(environ)
-        start_time = time.time()
-        
-        try:
-            response = self.app(environ, start_response)
-            status_code = int(response[0].decode().split()[0])
-            
-            # Process response and gather metrics
-            end_time = time.time()
-            duration_ms = (end_time - start_time) * 1000
-            
-            log_entry = {
-                'timestamp': datetime.utcnow().isoformat(),
-                'trace_id': getattr(g, 'trace_id', str(uuid.uuid4())),
-                'request': {
-                    'method': request.method,
-                    'path': request.path,
-                    'client': request.remote_addr,
-                    'user_agent': request.user_agent.string,
-                    'status': status_code,
-                    'duration_ms': duration_ms,
-                    'query_params': dict(request.args)
-                },
-                'runtime': self._get_runtime_info(),
-                'system': self._get_system_metrics()
-            }
-            
-            # Only add error info for error status codes
-            if status_code >= 400:
-                log_entry['error'] = self._log_error(
-                    Exception(f"HTTP {status_code}"),
-                    request
-                )
-            
-            self._write_log(log_entry)
-            return response
-            
-        except Exception as e:
-            # Handle uncaught exceptions
-            error_info = self._log_error(e, request)
-            
-            log_entry = {
-                'timestamp': datetime.utcnow().isoformat(),
-                'trace_id': getattr(g, 'trace_id', str(uuid.uuid4())),
-                'request': {
-                    'method': request.method,
-                    'path': request.path,
-                    'client': request.remote_addr,
-                    'user_agent': request.user_agent.string,
-                    'status': 500,
-                    'duration_ms': (time.time() - start_time) * 1000,
-                    'query_params': dict(request.args)
-                },
-                'runtime': self._get_runtime_info(),
-                'system': self._get_system_metrics(),
-                'error': error_info
-            }
-            
-            self._write_log(log_entry)
-            
-            # Return a 500 error response
-            response_body = json.dumps({
-                'error': 'Internal Server Error',
-                'message': str(e)
-            }).encode('utf-8')
-            
-            response_headers = [
-                ('Content-Type', 'application/json'),
-                ('Content-Length', str(len(response_body)))
-            ]
-            
-            start_response('500 Internal Server Error', response_headers)
-            return [response_body]

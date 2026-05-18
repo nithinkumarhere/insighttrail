@@ -89,7 +89,17 @@ def setup_logger(log_file, log_level_str, max_file_size, backup_count):
     rotating_handler.setFormatter(JSONFormatter())
 
     logger.setLevel(log_level)
-    logger.addHandler(rotating_handler)
+    logger.propagate = False
+
+    has_same_handler = False
+    for existing_handler in logger.handlers:
+        if isinstance(existing_handler, RotatingFileHandler):
+            if getattr(existing_handler, 'baseFilename', None) == rotating_handler.baseFilename:
+                has_same_handler = True
+                break
+
+    if not has_same_handler:
+        logger.addHandler(rotating_handler)
 
 def get_system_metrics():
     """Get essential system metrics."""
@@ -122,11 +132,20 @@ def get_system_metrics():
     except Exception as e:
         return {"error": str(e)}
 
-def get_runtime_info():
+def get_runtime_info(capture_env_vars=False, env_allowlist=None):
     """Get essential runtime information."""
     try:
         process = psutil.Process()
         
+        safe_env = {}
+        if capture_env_vars:
+            if env_allowlist:
+                safe_env = {k: os.environ.get(k, '') for k in env_allowlist if k in os.environ}
+            else:
+                safe_env = {k: v for k, v in os.environ.items()
+                            if not any(sensitive in k.lower()
+                                      for sensitive in ['key', 'token', 'secret', 'pass', 'auth'])}
+
         runtime_info = {
             "python": {
                 "version": sys.version.split()[0],  # Just the version number
@@ -140,9 +159,7 @@ def get_runtime_info():
                 "create_time": datetime.datetime.fromtimestamp(process.create_time()).isoformat()
             },
             "environment": {
-                "vars": {k: v for k, v in os.environ.items() 
-                        if not any(sensitive in k.lower() 
-                                 for sensitive in ['key', 'token', 'secret', 'pass', 'auth'])}
+                "vars": safe_env
             }
         }
         
@@ -150,10 +167,11 @@ def get_runtime_info():
     except Exception as e:
         return {"error": str(e)}
 
-def log_request(request, response, duration):
+def log_request(request, response, duration, capture_runtime=False, capture_system_metrics=False,
+                capture_env_vars=False, env_allowlist=None):
     trace_id = getattr(g, 'trace_id', 'N/A')
-    system_metrics = get_system_metrics()
-    runtime_info = get_runtime_info()
+    system_metrics = get_system_metrics() if capture_system_metrics else None
+    runtime_info = get_runtime_info(capture_env_vars=capture_env_vars, env_allowlist=env_allowlist) if capture_runtime else None
 
     logger.info("Request completed", extra={
         "trace_id": trace_id,
@@ -166,13 +184,14 @@ def log_request(request, response, duration):
         "runtime_info": runtime_info
     })
 
-def log_error(request, exception, duration):
+def log_error(request, exception, duration, capture_runtime=False, capture_system_metrics=False,
+              capture_env_vars=False, env_allowlist=None):
     trace_id = getattr(g, 'trace_id', 'N/A')
     error_type = exception.__class__.__name__
     status_code = 500
     
-    system_metrics = get_system_metrics()
-    runtime_info = get_runtime_info()
+    system_metrics = get_system_metrics() if capture_system_metrics else None
+    runtime_info = get_runtime_info(capture_env_vars=capture_env_vars, env_allowlist=env_allowlist) if capture_runtime else None
 
     # Get the full traceback
     tb = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))

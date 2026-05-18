@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>InsightTrail</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
+    <style>
+        :root {
+            --bg: #f3f6f8;
+            --card: #ffffff;
+            --text: #1f2933;
+            --muted: #6b7280;
+            --line: #d7dee3;
+            --accent: #146c94;
+            --good: #1f8a70;
+            --bad: #b42318;
+        }
+        body { background: linear-gradient(170deg, #edf3f6 0%, #f8fbfc 100%); color: var(--text); }
+        .container { max-width: 1180px; }
+        .topbar { margin: 2rem 0 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .brand { margin: 0; letter-spacing: 0.3px; }
+        .muted { color: var(--muted); }
+        .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.04); }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.8rem; }
+        .metric h3 { margin: 0; font-size: 1.8rem; color: var(--accent); }
+        .metric p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+        .controls { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+        input[type="text"] { margin-bottom: 0; }
+        button, .button { margin-bottom: 0; }
+        .button, button, input[type='button'], input[type='submit'] {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+        .button:focus, .button:hover, button:focus, button:hover,
+        input[type='button']:focus, input[type='button']:hover,
+        input[type='submit']:focus, input[type='submit']:hover {
+            background-color: #115a7a;
+            border-color: #115a7a;
+            color: #fff;
+        }
+        .button.button-outline {
+            background-color: transparent;
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .button.button-outline:focus, .button.button-outline:hover {
+            background-color: var(--accent);
+            color: #fff;
+        }
+        .icon-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+        .icon { font-size: 1.05em; line-height: 1; }
+        table { font-size: 1.5rem; border-collapse: collapse; width: 100%; }
+        th, td { padding: 1rem 1.1rem; vertical-align: middle; text-align: left; }
+        thead th { border-bottom: 1px solid var(--line); }
+        tbody tr + tr td { border-top: 1px solid #eef2f5; }
+        .status { padding: 0.25rem 0.65rem; border-radius: 999px; font-size: 1.5rem; color: #fff; }
+        .chip { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; color: #fff; font-size: 1.1rem; line-height: 1.2; }
+        .chip-green { background: var(--good); }
+        .chip-yellow { background: #d4a017; }
+        .ok { background: var(--good); }
+        .err { background: var(--bad); }
+        .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem; background: #fff; }
+        .uplot { width: 100% !important; }
+        .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+        .errors { max-height: 240px; overflow: auto; }
+        .error-item { border-bottom: 1px solid var(--line); padding: 0.5rem 0; }
+        .error-item:last-child { border-bottom: none; }
+        .small { font-size: 1.5rem; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
+        .modal-backdrop.open { display: flex; }
+        .modal-card { width: min(960px, 100%); max-height: 90vh; overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; font-size: 1.5rem; }
+        .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+        .tab-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.75rem 0; }
+        .tab-btn { font-size: 1.5rem; }
+        .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .json-box { background: #f8fafb; border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem; white-space: pre-wrap; word-break: break-word; font-size: 1.5rem; }
+        @media (max-width: 768px) {
+            .split { grid-template-columns: 1fr; }
+            .topbar { align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+<main class="container">
+    <section class="topbar">
+        <div>
+            <h2 class="brand">InsightTrail</h2>
+            <p class="muted">Lightweight observability dashboard</p>
+        </div>
+        <div class="controls">
+            <input id="traceInput" type="text" placeholder="Search by trace id">
+            <button class="button button-outline icon-btn" onclick="searchLogs()"><span class="icon">&#128269;</span><span>Search</span></button>
+            <button class="button icon-btn" onclick="refreshAll()"><span class="icon">&#8635;</span><span>Refresh</span></button>
+        </div>
+    </section>
+
+    <section class="panel metrics">
+        <article class="metric"><h3 id="mRequests">0</h3><p>Total Requests</p></article>
+        <article class="metric"><h3 id="mErrors">0</h3><p>Error Count</p></article>
+        <article class="metric"><h3 id="mErrorRate">0%</h3><p>Error Rate</p></article>
+        <article class="metric"><h3 id="mAvg">0ms</h3><p>Average Duration</p></article>
+        <article class="metric"><h3 id="mUptime">-</h3><p>Service Uptime</p></article>
+        <article class="metric"><h3 id="mCurrentCpu">0%</h3><p>Current CPU</p></article>
+        <article class="metric"><h3 id="mCurrentMem">0%</h3><p>Current Memory</p></article>
+    </section>
+
+    <section class="panel metrics">
+        <article class="metric"><h3 id="pMainPid">-</h3><p>Main Process PID</p></article>
+        <article class="metric"><h3 id="pMainName">-</h3><p>Main Process Name</p></article>
+        <article class="metric"><h3 id="pWorkers">0</h3><p>Worker Count</p></article>
+        <article class="metric"><h3 id="pThreads">0</h3><p>Total Threads</p></article>
+        <article class="metric"><h3 id="pConnections">0</h3><p>Total Connections</p></article>
+        <article class="metric"><h3 id="pCores">0</h3><p>CPU Cores</p></article>
+    </section>
+
+    {% if enable_charts %}
+    <section class="split">
+        <div class="panel">
+            <h5>Latency Trend (ms)</h5>
+            <div id="latencyChart"></div>
+        </div>
+        <div class="panel">
+            <h5>CPU/Memory Trend (%)</h5>
+            <div id="resourceChart"></div>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="panel">
+        <h5>Dependency Status</h5>
+        <p class="muted" style="margin-top: -0.2rem; margin-bottom: 0.8rem;">
+            <span class="chip chip-green">Green</span> up-to-date/latest,
+            <span class="chip chip-yellow">Yellow</span> update recommended
+        </p>
+        <div class="controls" style="margin-bottom: 0.8rem;">
+            <select id="pkgStabilityFilter" onchange="applyPackageFilters()" style="margin-bottom: 0;">
+                <option value="all">All Stability</option>
+                <option value="stable">Stable</option>
+                <option value="pre-release">Pre-release</option>
+            </select>
+            <select id="pkgRequiredFilter" onchange="applyPackageFilters()" style="margin-bottom: 0;">
+                <option value="all">All Packages</option>
+                <option value="required">Required Only</option>
+                <option value="optional">Optional Only</option>
+            </select>
+            <input id="pkgSearch" type="text" placeholder="Search package" oninput="applyPackageFilters()" style="margin-bottom: 0;">
+        </div>
+        <div class="log-table-wrap">
+            <table>
+                <thead><tr><th>Name</th><th>Current</th><th>Latest</th><th>Stability</th><th>Req</th><th>Description</th></tr></thead>
+                <tbody id="packagesBody"></tbody>
+            </table>
+        </div>
+        {% if not dependency_check %}
+        <p class="muted" style="margin-top: 0.8rem;">Version checks are disabled in current mode.</p>
+        {% endif %}
+    </section>
+
+    <section class="panel">
+        <h5>Request Logs</h5>
+        <div class="log-table-wrap">
+            <table>
+                <thead>
+                <tr><th>Time</th><th>Trace</th><th>Path</th><th>Method</th><th>Status</th><th>Duration</th><th>Client</th><th>Details</th></tr>
+                </thead>
+                <tbody id="logsBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<div id="logModal" class="modal-backdrop" onclick="backdropClose(event)">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-head">
+            <h5 id="modalTitle">Request Details</h5>
+            <button class="button button-outline icon-btn" onclick="closeModal()"><span class="icon">&#10005;</span><span>Close</span></button>
+        </div>
+        <div class="tab-row">
+            <button id="tabRequestBtn" class="button button-outline tab-btn active" onclick="setModalTab('request')">Request</button>
+            <button id="tabErrorBtn" class="button button-outline tab-btn" onclick="setModalTab('error')">Error</button>
+            <button id="tabRuntimeBtn" class="button button-outline tab-btn" onclick="setModalTab('runtime')">Runtime</button>
+            <button id="tabSystemBtn" class="button button-outline tab-btn" onclick="setModalTab('system')">System</button>
+        </div>
+        <div id="panelRequest" class="tab-panel active">
+            <div id="modalRequest" class="json-box"></div>
+        </div>
+        <div id="panelError" class="tab-panel">
+            <div id="modalError" class="json-box"></div>
+        </div>
+        <div id="panelRuntime" class="tab-panel">
+            <div id="modalRuntime" class="json-box"></div>
+        </div>
+        <div id="panelSystem" class="tab-panel">
+            <div id="modalSystem" class="json-box"></div>
+        </div>
+    </div>
+</div>
+
+{% if enable_charts %}
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
+{% endif %}
+<script>
+    const insightBaseUrl = "{{ insight_base_url|default('/insight') }}";
+    const uiRefreshSeconds = {{ ui_refresh_seconds|default(10) }};
+    const chartsEnabled = {{ 'true' if enable_charts else 'false' }};
+    const packageChecksEnabled = {{ 'true' if dependency_check else 'false' }};
+    let logs = [];
+    let metrics = null;
+    let packagesData = [];
+    let latencyPlot = null;
+    let resourcePlot = null;
+    let resourceTrend = [];
+
+    function formatUptime(seconds) {
+        if (!seconds || seconds < 0) return '-';
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor((seconds % 86400) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${d}d ${h}h ${m}m`;
+    }
+
+    function renderMetrics() {
+        const total = logs.length;
+        const errors = logs.filter(l => l.error || (l.request && l.request.status >= 400)).length;
+        const avg = total ? (logs.reduce((a, l) => a + (l.request?.duration_ms || 0), 0) / total) : 0;
+        const rate = total ? ((errors / total) * 100) : 0;
+
+        document.getElementById('mRequests').textContent = total;
+        document.getElementById('mErrors').textContent = errors;
+        document.getElementById('mErrorRate').textContent = rate.toFixed(1) + '%';
+        document.getElementById('mAvg').textContent = avg.toFixed(1) + 'ms';
+        document.getElementById('mUptime').textContent = formatUptime(metrics?.uptime_seconds || 0);
+
+        const p = metrics?.process_info || {};
+        const s = metrics?.system_metrics || {};
+        document.getElementById('pMainPid').textContent = p.main_pid ?? '-';
+        document.getElementById('pMainName').textContent = p.main_name ?? '-';
+        document.getElementById('pWorkers').textContent = p.worker_count ?? 0;
+        document.getElementById('pThreads').textContent = p.total_threads ?? 0;
+        document.getElementById('pConnections').textContent = p.total_connections ?? 0;
+        document.getElementById('pCores').textContent = p.cpu_cores ?? 0;
+        document.getElementById('mCurrentCpu').textContent = (Number(s.cpu_percent ?? 0)).toFixed(1) + '%';
+        document.getElementById('mCurrentMem').textContent = (Number(s.memory_percent ?? 0)).toFixed(1) + '%';
+    }
+
+    function renderLogsTable() {
+        const body = document.getElementById('logsBody');
+        body.innerHTML = logs.slice(0, 250).map(log => {
+            const status = log.request?.status || 0;
+            const badgeClass = status >= 400 ? 'err' : 'ok';
+            return `<tr>
+                <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
+                <td class="small">${log.trace_id || '-'}</td>
+                <td>${log.request?.path || '-'}</td>
+                <td>${log.request?.method || '-'}</td>
+                <td><span class="status ${badgeClass}">${status || '-'}</span></td>
+                <td>${(log.request?.duration_ms || 0).toFixed(2)}ms</td>
+                <td>${log.request?.client || '-'}</td>
+                <td><button class="button button-clear" onclick='openDetails(${JSON.stringify(JSON.stringify(log))})'>View</button></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function openDetails(logJsonString) {
+        const log = JSON.parse(logJsonString);
+        document.getElementById('modalRequest').textContent = JSON.stringify(log.request || {}, null, 2);
+        document.getElementById('modalError').textContent = JSON.stringify(log.error || { message: 'No error' }, null, 2);
+        document.getElementById('modalRuntime').textContent = JSON.stringify(log.runtime || { message: 'Runtime capture disabled' }, null, 2);
+        document.getElementById('modalSystem').textContent = JSON.stringify(log.system || { message: 'System metrics disabled' }, null, 2);
+        setModalTab('request');
+        document.getElementById('logModal').classList.add('open');
+    }
+
+    function setModalTab(tab) {
+        const tabs = ['request', 'error', 'runtime', 'system'];
+        tabs.forEach(name => {
+            const btn = document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1) + 'Btn');
+            const panel = document.getElementById('panel' + name.charAt(0).toUpperCase() + name.slice(1));
+            const isActive = name === tab;
+            btn.classList.toggle('active', isActive);
+            panel.classList.toggle('active', isActive);
+        });
+    }
+
+    function closeModal() {
+        document.getElementById('logModal').classList.remove('open');
+    }
+
+    function backdropClose(event) {
+        if (event.target.id === 'logModal') {
+            closeModal();
+        }
+    }
+
+
+    function createOrUpdatePlot(el, plot, series, data) {
+        const options = {
+            width: el.clientWidth || 520,
+            height: 220,
+            series,
+            scales: { x: { time: false } },
+            axes: [{ stroke: '#7b8794' }, { stroke: '#7b8794' }],
+            legend: { show: true }
+        };
+        if (!plot) {
+            return new uPlot(options, data, el);
+        }
+        plot.setData(data);
+        return plot;
+    }
+
+    function renderCharts() {
+        if (!chartsEnabled) {
+            return;
+        }
+        const recent = logs.slice(0, 40).reverse();
+        const x = recent.map((_, i) => i + 1);
+        const latency = recent.map(l => l.request?.duration_ms || 0);
+        const cpu = resourceTrend.map(p => p.cpu);
+        const mem = resourceTrend.map(p => p.mem);
+        const rx = resourceTrend.map((_, i) => i + 1);
+
+        latencyPlot = createOrUpdatePlot(
+            document.getElementById('latencyChart'),
+            latencyPlot,
+            [{label: 'x'}, {label: 'Latency', stroke: '#146c94', width: 2}],
+            [x, latency]
+        );
+
+        resourcePlot = createOrUpdatePlot(
+            document.getElementById('resourceChart'),
+            resourcePlot,
+            [{label: 'x'}, {label: 'CPU', stroke: '#1f8a70', width: 2}, {label: 'Memory', stroke: '#b42318', width: 2}],
+            [rx, cpu, mem]
+        );
+    }
+
+    function updateResourceTrend() {
+        const cpu = Number(metrics?.system_metrics?.cpu_percent ?? 0);
+        const mem = Number(metrics?.system_metrics?.memory_percent ?? 0);
+        resourceTrend.push({ cpu, mem });
+        if (resourceTrend.length > 40) {
+            resourceTrend = resourceTrend.slice(resourceTrend.length - 40);
+        }
+    }
+
+    function renderPackagesTable(items) {
+        const body = document.getElementById('packagesBody');
+        body.innerHTML = items.slice(0, 300).map(pkg => `
+            <tr>
+                <td>${pkg.name}</td>
+                <td><span class="chip ${pkg.current_version === pkg.latest_version ? 'chip-green' : 'chip-yellow'}">${pkg.current_version}</span></td>
+                <td><span class="chip chip-green">${pkg.latest_version}</span></td>
+                <td><span class="chip ${pkg.stability === 'stable' ? 'chip-green' : 'chip-yellow'}">${pkg.stability || 'unknown'}</span></td>
+                <td>${pkg.required ? 'yes' : 'no'}</td>
+                <td class="small">${pkg.description || '-'}</td>
+            </tr>`).join('');
+    }
+
+    function applyPackageFilters() {
+        const stability = document.getElementById('pkgStabilityFilter').value;
+        const required = document.getElementById('pkgRequiredFilter').value;
+        const search = document.getElementById('pkgSearch').value.trim().toLowerCase();
+
+        let filtered = packagesData.slice();
+
+        if (stability !== 'all') {
+            filtered = filtered.filter(pkg => (pkg.stability || '').toLowerCase() === stability);
+        }
+
+        if (required === 'required') {
+            filtered = filtered.filter(pkg => !!pkg.required);
+        } else if (required === 'optional') {
+            filtered = filtered.filter(pkg => !pkg.required);
+        }
+
+        if (search) {
+            filtered = filtered.filter(pkg => {
+                const haystack = `${pkg.name || ''} ${pkg.description || ''}`.toLowerCase();
+                return haystack.includes(search);
+            });
+        }
+
+        renderPackagesTable(filtered);
+    }
+
+    async function refreshPackages() {
+        const body = document.getElementById('packagesBody');
+        if (!packageChecksEnabled) {
+            body.innerHTML = '<tr><td colspan="6">Disabled in ultra-light mode</td></tr>';
+            return;
+        }
+        body.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+        try {
+            const response = await fetch(`${insightBaseUrl}/api/packages`);
+            packagesData = await response.json();
+            applyPackageFilters();
+        } catch (e) {
+            body.innerHTML = '<tr><td colspan="6">Failed to load packages</td></tr>';
+        }
+    }
+
+    async function refreshAll() {
+        try {
+            const response = await fetch(`${insightBaseUrl}/api/analytics/logs`);
+            const payload = await response.json();
+            logs = payload.logs || [];
+            metrics = payload.metrics || null;
+            updateResourceTrend();
+            renderMetrics();
+            renderLogsTable();
+            renderCharts();
+        } catch (e) {
+            console.error('Failed loading logs', e);
+        }
+    }
+
+    async function searchLogs() {
+        const traceId = document.getElementById('traceInput').value.trim();
+        if (!traceId) {
+            refreshAll();
+            return;
+        }
+        try {
+            const response = await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`);
+            const payload = await response.json();
+            logs = payload.logs || [];
+            metrics = payload.metrics || null;
+            updateResourceTrend();
+            renderMetrics();
+            renderLogsTable();
+            renderCharts();
+        } catch (e) {
+            console.error('Search failed', e);
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        if (latencyPlot || resourcePlot) {
+            renderCharts();
+        }
+    });
+
+    refreshAll();
+    refreshPackages();
+    setInterval(refreshAll, uiRefreshSeconds * 1000);
+</script>
+</body>
+</html>
