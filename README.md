@@ -9,7 +9,7 @@ InsightTrail is a lightweight observability package for Python web services. It 
 It supports both Flask and FastAPI with a single import:
 
 ```python
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 ```
 
 ## What Is New
@@ -48,10 +48,10 @@ pip install -e .
 
 ```python
 from flask import Flask
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 
 app = Flask(__name__)
-InsightTrail(app)
+InsightTrailMiddleware(app)
 
 @app.route('/')
 def home():
@@ -62,10 +62,10 @@ def home():
 
 ```python
 from fastapi import FastAPI
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 
 app = FastAPI()
-InsightTrail(app)
+InsightTrailMiddleware(app)
 
 @app.get('/')
 def home():
@@ -77,7 +77,7 @@ Open `http://localhost:8000/insight/` (or your configured prefix).
 ## Configuration
 
 ```python
-InsightTrail(
+InsightTrailMiddleware(
     app,
     log_file='logs/insighttrail.log',
     log_level='INFO',
@@ -106,7 +106,7 @@ InsightTrail(
 ### Ultra-Light Mode
 
 ```python
-InsightTrail(app, ultra_light_mode=True)
+InsightTrailMiddleware(app, ultra_light_mode=True)
 ```
 
 When `ultra_light_mode=True`:
