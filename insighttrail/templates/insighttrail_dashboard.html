@@ -27,6 +27,9 @@
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.8rem; }
         .metric h3 { margin: 0; font-size: 1.8rem; color: var(--accent); }
         .metric p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+        .metric.health-ok h3 { color: var(--good); }
+        .metric.health-warn h3 { color: #d4a017; }
+        .metric.health-bad h3 { color: var(--bad); }
         .controls { display: flex; gap: 0.6rem; flex-wrap: wrap; }
         input[type="text"] { margin-bottom: 0; }
         button, .button { margin-bottom: 0; }
@@ -53,6 +56,20 @@
         }
         .icon-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
         .icon { font-size: 1.05em; line-height: 1; }
+        .search-wrap { position: relative; display: inline-flex; align-items: center; }
+        .search-wrap input { padding-right: 2.2rem; }
+        .clear-btn {
+            position: absolute;
+            right: 0.5rem;
+            border: 0;
+            background: transparent;
+            color: #6b7280;
+            font-size: 1.2rem;
+            line-height: 1;
+            padding: 0.1rem 0.2rem;
+            cursor: pointer;
+        }
+        .clear-btn:hover { color: #111827; }
         table { font-size: 1.5rem; border-collapse: collapse; width: 100%; }
         th, td { padding: 1rem 1.1rem; vertical-align: middle; text-align: left; }
         thead th { border-bottom: 1px solid var(--line); }
@@ -64,6 +81,7 @@
         .ok { background: var(--good); }
         .err { background: var(--bad); }
         .log-table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem; background: #fff; }
+        .log-table-wrap thead th { position: sticky; top: 0; background: #fff; z-index: 2; }
         .uplot { width: 100% !important; }
         .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
         .errors { max-height: 240px; overflow: auto; }
@@ -80,6 +98,42 @@
         .tab-panel { display: none; }
         .tab-panel.active { display: block; }
         .json-box { background: #f8fafb; border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem; white-space: pre-wrap; word-break: break-word; font-size: 1.5rem; }
+        .trace-copy { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+        .error-row { background: rgba(180, 35, 24, 0.08); }
+        .toast {
+            position: fixed;
+            right: 1rem;
+            bottom: 1rem;
+            background: #146c94;
+            color: #fff;
+            border-radius: 10px;
+            padding: 0.7rem 1rem;
+            font-size: 1.1rem;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 80;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .pager { display: flex; align-items: center; gap: 0.6rem; justify-content: flex-end; margin-top: 0.8rem; flex-wrap: wrap; }
+        .pager .button { margin: 0; }
+        .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+        @media (max-width: 768px) { .export-grid { grid-template-columns: 1fr; } }
+        .spinner {
+            width: 1em;
+            height: 1em;
+            border: 2px solid rgba(255, 255, 255, 0.45);
+            border-top-color: #fff;
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 768px) {
             .split { grid-template-columns: 1fr; }
             .topbar { align-items: flex-start; }
@@ -91,12 +145,16 @@
     <section class="topbar">
         <div>
             <h2 class="brand">InsightTrail</h2>
-            <p class="muted">Lightweight observability dashboard</p>
+            <p class="muted">Lightweight observability dashboard <span id="lastRefresh">(not refreshed yet)</span></p>
         </div>
         <div class="controls">
-            <input id="traceInput" type="text" placeholder="Search by trace id">
-            <button class="button button-outline icon-btn" onclick="searchLogs()"><span class="icon">&#128269;</span><span>Search</span></button>
+            <div class="search-wrap">
+                <input id="traceInput" type="text" placeholder="Search by trace id" oninput="toggleClearButton()">
+                <button id="clearTraceBtn" class="clear-btn" type="button" onclick="clearTraceSearch()" aria-label="Clear trace search" title="Clear">&times;</button>
+            </div>
+            <button class="button button-outline icon-btn" onclick="searchLogs()"><span class="icon">&#9906;</span><span>Search</span></button>
             <button class="button icon-btn" onclick="refreshAll()"><span class="icon">&#8635;</span><span>Refresh</span></button>
+            <button class="button button-outline icon-btn" onclick="openExportModal()"><span class="icon">&#8681;</span><span>Export</span></button>
         </div>
     </section>
 
@@ -108,6 +166,8 @@
         <article class="metric"><h3 id="mUptime">-</h3><p>Service Uptime</p></article>
         <article class="metric"><h3 id="mCurrentCpu">0%</h3><p>Current CPU</p></article>
         <article class="metric"><h3 id="mCurrentMem">0%</h3><p>Current Memory</p></article>
+        <article id="cardQueueDepth" class="metric"><h3 id="mQueueDepth">0</h3><p>Logger Queue Depth</p></article>
+        <article id="cardDroppedLogs" class="metric"><h3 id="mDroppedLogs">0</h3><p>Dropped Logs</p></article>
     </section>
 
     <section class="panel metrics">
@@ -164,6 +224,20 @@
 
     <section class="panel">
         <h5>Request Logs</h5>
+        <div class="controls" style="margin-bottom: 0.8rem;">
+            <select id="logStatusFilter" onchange="applyLogFilters()" style="margin-bottom: 0;">
+                <option value="all">All Status</option>
+                <option value="success">Success</option>
+                <option value="error">Error</option>
+            </select>
+            <select id="logRangeFilter" onchange="applyLogFilters()" style="margin-bottom: 0;">
+                <option value="all">All Time</option>
+                <option value="1d">Last 1 Day</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="1m">Last 1 Month</option>
+            </select>
+            <span id="logFilterCount" class="muted"></span>
+        </div>
         <div class="log-table-wrap">
             <table>
                 <thead>
@@ -172,8 +246,60 @@
                 <tbody id="logsBody"></tbody>
             </table>
         </div>
+        <div class="pager">
+            <label for="pageSize" class="muted">Rows</label>
+            <select id="pageSize" onchange="changePageSize()" style="margin-bottom: 0; width: 8rem;">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+            <button id="prevPageBtn" class="button button-outline" onclick="prevPage()">Prev</button>
+            <span id="pageInfo" class="muted">Page 1 / 1</span>
+            <button id="nextPageBtn" class="button button-outline" onclick="nextPage()">Next</button>
+        </div>
     </section>
 </main>
+
+<div id="copyToast" class="toast" role="status" aria-live="polite">Trace ID copied</div>
+
+<div id="exportModal" class="modal-backdrop" onclick="exportBackdropClose(event)">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+        <div class="modal-head">
+            <h5 id="exportModalTitle">Export Excel Report</h5>
+            <button class="button button-outline icon-btn" onclick="closeExportModal()"><span class="icon">&#10005;</span><span>Close</span></button>
+        </div>
+        <p class="muted">Times are interpreted in your local timezone.</p>
+        <div class="controls" style="margin-bottom: 0.8rem;">
+            <select id="exportRange" onchange="toggleCustomRange()" style="margin-bottom: 0;">
+                <option value="1d">Last 1 Day</option>
+                <option value="7d" selected>Last 7 Days</option>
+                <option value="1m">Last 1 Month</option>
+                <option value="6m">Last 6 Months</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+        <div class="controls" style="margin-bottom: 0.8rem;">
+            <label><input type="checkbox" id="sheetSummary" checked> Summary</label>
+            <label><input type="checkbox" id="sheetRequests" checked> Requests</label>
+            <label><input type="checkbox" id="sheetErrors" checked> Errors</label>
+            <label><input type="checkbox" id="sheetDependencies" checked> Dependencies</label>
+        </div>
+        <div id="customRangeFields" class="export-grid" style="display: none; margin-bottom: 0.8rem;">
+            <div>
+                <label for="exportStart">Start</label>
+                <input id="exportStart" type="datetime-local" step="1" onchange="refreshExportEstimate()">
+            </div>
+            <div>
+                <label for="exportEnd">End</label>
+                <input id="exportEnd" type="datetime-local" step="1" onchange="refreshExportEstimate()">
+            </div>
+        </div>
+        <p id="exportEstimate" class="muted" style="margin-bottom: 0.8rem;">Estimated rows: -</p>
+        <div class="controls">
+            <button id="exportDownloadBtn" class="button icon-btn" onclick="downloadExcelReport()"><span id="exportBtnIcon" class="icon">&#128190;</span><span id="exportBtnLabel">Download .xlsx</span></button>
+        </div>
+    </div>
+</div>
 
 <div id="logModal" class="modal-backdrop" onclick="backdropClose(event)">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -212,6 +338,15 @@
     const packageChecksEnabled = {{ 'true' if dependency_check else 'false' }};
     let logs = [];
     let metrics = null;
+    let loggerStats = null;
+    let logCursor = 0;
+    let searchMode = false;
+    let refreshTimerId = null;
+    let isPollingPaused = false;
+    let toastTimerId = null;
+    let currentPage = 1;
+    let pageSize = 50;
+    let filteredLogs = [];
     let packagesData = [];
     let latencyPlot = null;
     let resourcePlot = null;
@@ -247,16 +382,53 @@
         document.getElementById('pCores').textContent = p.cpu_cores ?? 0;
         document.getElementById('mCurrentCpu').textContent = (Number(s.cpu_percent ?? 0)).toFixed(1) + '%';
         document.getElementById('mCurrentMem').textContent = (Number(s.memory_percent ?? 0)).toFixed(1) + '%';
+        const queueDepth = Number(loggerStats?.queue_depth ?? 0);
+        const droppedLogs = Number(loggerStats?.dropped_log_count ?? 0);
+        document.getElementById('mQueueDepth').textContent = queueDepth;
+        document.getElementById('mDroppedLogs').textContent = droppedLogs;
+
+        const queueCard = document.getElementById('cardQueueDepth');
+        const dropCard = document.getElementById('cardDroppedLogs');
+        queueCard.classList.remove('health-ok', 'health-warn', 'health-bad');
+        dropCard.classList.remove('health-ok', 'health-warn', 'health-bad');
+
+        if (queueDepth === 0) {
+            queueCard.classList.add('health-ok');
+        } else if (queueDepth < 100) {
+            queueCard.classList.add('health-warn');
+        } else {
+            queueCard.classList.add('health-bad');
+        }
+
+        if (droppedLogs === 0) {
+            dropCard.classList.add('health-ok');
+        } else {
+            dropCard.classList.add('health-bad');
+        }
     }
 
     function renderLogsTable() {
         const body = document.getElementById('logsBody');
-        body.innerHTML = logs.slice(0, 250).map(log => {
+        const orderedLogs = filteredLogs.slice().reverse();
+        const totalRows = orderedLogs.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+        if (currentPage < 1) {
+            currentPage = 1;
+        }
+
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const pageRows = orderedLogs.slice(start, end);
+
+        body.innerHTML = pageRows.map(log => {
             const status = log.request?.status || 0;
             const badgeClass = status >= 400 ? 'err' : 'ok';
             return `<tr>
                 <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
-                <td class="small">${log.trace_id || '-'}</td>
+                <td class="small"><span class="trace-copy" onclick="copyTraceId('${(log.trace_id || '').replace(/'/g, "\\'")}')">${log.trace_id || '-'}</span></td>
                 <td>${log.request?.path || '-'}</td>
                 <td>${log.request?.method || '-'}</td>
                 <td><span class="status ${badgeClass}">${status || '-'}</span></td>
@@ -265,6 +437,250 @@
                 <td><button class="button button-clear" onclick='openDetails(${JSON.stringify(JSON.stringify(log))})'>View</button></td>
             </tr>`;
         }).join('');
+
+        const rows = body.querySelectorAll('tr');
+        pageRows.forEach((log, idx) => {
+            if ((log.request?.status || 0) >= 400 && rows[idx]) {
+                rows[idx].classList.add('error-row');
+            }
+        });
+
+        document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages}`;
+        document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+        document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        document.getElementById('logFilterCount').textContent = `${totalRows} row(s)`;
+    }
+
+    function applyLogFilters() {
+        const status = document.getElementById('logStatusFilter').value;
+        const range = document.getElementById('logRangeFilter').value;
+        let result = logs.slice();
+
+        if (status === 'success') {
+            result = result.filter(log => (log.request?.status || 0) < 400);
+        } else if (status === 'error') {
+            result = result.filter(log => (log.request?.status || 0) >= 400 || !!log.error);
+        }
+
+        if (range !== 'all') {
+            const now = new Date();
+            let days = 0;
+            if (range === '1d') days = 1;
+            if (range === '7d') days = 7;
+            if (range === '1m') days = 30;
+            if (days > 0) {
+                const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+                result = result.filter(log => {
+                    if (!log.timestamp) return false;
+                    const ts = new Date(log.timestamp);
+                    return ts >= cutoff;
+                });
+            }
+        }
+
+        filteredLogs = result;
+        currentPage = 1;
+        renderLogsTable();
+    }
+
+    function changePageSize() {
+        pageSize = Number(document.getElementById('pageSize').value || 50);
+        currentPage = 1;
+        renderLogsTable();
+    }
+
+    function prevPage() {
+        currentPage -= 1;
+        renderLogsTable();
+    }
+
+    function nextPage() {
+        currentPage += 1;
+        renderLogsTable();
+    }
+
+    function copyTraceId(traceId) {
+        if (!traceId) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(traceId).then(() => showCopyToast('Trace ID copied'));
+            return;
+        }
+        showCopyToast('Copy not supported in this browser');
+    }
+
+    function toggleClearButton() {
+        const input = document.getElementById('traceInput');
+        const clearBtn = document.getElementById('clearTraceBtn');
+        if (!input || !clearBtn) return;
+        clearBtn.style.display = input.value.trim() ? 'inline-block' : 'none';
+    }
+
+    function clearTraceSearch() {
+        const input = document.getElementById('traceInput');
+        if (!input) return;
+        input.value = '';
+        toggleClearButton();
+        searchMode = false;
+        logCursor = 0;
+        refreshAll();
+    }
+
+    function showCopyToast(message) {
+        const toast = document.getElementById('copyToast');
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add('show');
+        if (toastTimerId) {
+            clearTimeout(toastTimerId);
+        }
+        toastTimerId = setTimeout(() => {
+            toast.classList.remove('show');
+        }, 1400);
+    }
+
+    function openExportModal() {
+        document.getElementById('exportModal').classList.add('open');
+        toggleCustomRange();
+        refreshExportEstimate();
+    }
+
+    function closeExportModal() {
+        document.getElementById('exportModal').classList.remove('open');
+    }
+
+    function exportBackdropClose(event) {
+        if (event.target.id === 'exportModal') {
+            closeExportModal();
+        }
+    }
+
+    function toggleCustomRange() {
+        const mode = document.getElementById('exportRange').value;
+        const custom = document.getElementById('customRangeFields');
+        custom.style.display = mode === 'custom' ? 'grid' : 'none';
+        refreshExportEstimate();
+    }
+
+    function toIsoFromLocalInput(value) {
+        if (!value) return '';
+        return value;
+    }
+
+    async function refreshExportEstimate() {
+        const mode = document.getElementById('exportRange').value;
+        const estimateNode = document.getElementById('exportEstimate');
+        if (!estimateNode) return;
+
+        const params = new URLSearchParams();
+        if (mode === 'custom') {
+            const start = toIsoFromLocalInput(document.getElementById('exportStart').value);
+            const end = toIsoFromLocalInput(document.getElementById('exportEnd').value);
+            if (!start || !end) {
+                estimateNode.textContent = 'Estimated rows: enter custom start and end';
+                return;
+            }
+            params.set('start', start);
+            params.set('end', end);
+        } else {
+            params.set('preset', mode);
+        }
+
+        estimateNode.textContent = 'Estimated rows: calculating...';
+        try {
+            const response = await fetch(`${insightBaseUrl}/api/reports/estimate?${params.toString()}`);
+            const payload = await response.json();
+            if (!response.ok) {
+                estimateNode.textContent = `Estimated rows: unavailable (${payload.error || 'error'})`;
+                return;
+            }
+            const prefix = payload.truncated ? '>=' : '';
+            estimateNode.textContent = `Estimated rows: ${prefix}${payload.estimated_rows} (max ${payload.report_max_rows})`;
+        } catch (_unused) {
+            estimateNode.textContent = 'Estimated rows: unavailable';
+        }
+    }
+
+    function setExportButtonLoading(isLoading) {
+        const btn = document.getElementById('exportDownloadBtn');
+        const icon = document.getElementById('exportBtnIcon');
+        const label = document.getElementById('exportBtnLabel');
+        if (!btn || !icon || !label) return;
+        btn.disabled = isLoading;
+        if (isLoading) {
+            icon.className = 'spinner';
+            icon.textContent = '';
+            label.textContent = 'Generating...';
+        } else {
+            icon.className = 'icon';
+            icon.innerHTML = '&#128190;';
+            label.textContent = 'Download .xlsx';
+        }
+    }
+
+    async function downloadExcelReport() {
+        const mode = document.getElementById('exportRange').value;
+        let url = `${insightBaseUrl}/api/reports/excel`;
+        const include = [];
+        if (document.getElementById('sheetSummary').checked) include.push('summary');
+        if (document.getElementById('sheetRequests').checked) include.push('requests');
+        if (document.getElementById('sheetErrors').checked) include.push('errors');
+        if (document.getElementById('sheetDependencies').checked) include.push('dependencies');
+        if (include.length === 0) {
+            showCopyToast('Select at least one sheet to export');
+            return;
+        }
+
+        const params = new URLSearchParams();
+        params.set('include', include.join(','));
+        if (mode === 'custom') {
+            const start = toIsoFromLocalInput(document.getElementById('exportStart').value);
+            const end = toIsoFromLocalInput(document.getElementById('exportEnd').value);
+            if (!start || !end) {
+                showCopyToast('Select both custom date-time values');
+                return;
+            }
+            params.set('start', start);
+            params.set('end', end);
+        } else {
+            params.set('preset', mode);
+        }
+        url += `?${params.toString()}`;
+
+        try {
+            setExportButtonLoading(true);
+            const response = await fetch(url);
+            if (!response.ok) {
+                let message = 'Export failed';
+                try {
+                    const err = await response.json();
+                    message = err.error || message;
+                } catch (_unused) {
+                }
+                showCopyToast(message);
+                setExportButtonLoading(false);
+                return;
+            }
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const contentDisposition = response.headers.get('Content-Disposition') || '';
+            const match = contentDisposition.match(/filename="([^"]+)"/);
+            const fileName = match ? match[1] : `insighttrail_report_${Date.now()}.xlsx`;
+
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            closeExportModal();
+            showCopyToast('Excel report downloaded');
+        } catch (_unused) {
+            showCopyToast('Export failed due to network error');
+        } finally {
+            setExportButtonLoading(false);
+        }
     }
 
     function openDetails(logJsonString) {
@@ -297,6 +713,12 @@
             closeModal();
         }
     }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    });
 
 
     function createOrUpdatePlot(el, plot, series, data) {
@@ -407,15 +829,33 @@
     }
 
     async function refreshAll() {
+        if (searchMode) {
+            return;
+        }
+        if (isPollingPaused) {
+            return;
+        }
         try {
-            const response = await fetch(`${insightBaseUrl}/api/analytics/logs`);
+            const response = await fetch(`${insightBaseUrl}/api/analytics/logs?limit=150&cursor=${encodeURIComponent(logCursor)}`);
             const payload = await response.json();
-            logs = payload.logs || [];
+            const incoming = payload.logs || [];
+            if (logCursor && incoming.length) {
+                logs = logs.concat(incoming);
+            } else if (!logCursor) {
+                logs = incoming;
+                currentPage = 1;
+            }
+            if (logs.length > 500) {
+                logs = logs.slice(logs.length - 500);
+            }
             metrics = payload.metrics || null;
+            loggerStats = payload.logger || null;
+            logCursor = Number(payload.cursor || logCursor || 0);
             updateResourceTrend();
             renderMetrics();
-            renderLogsTable();
+            applyLogFilters();
             renderCharts();
+            document.getElementById('lastRefresh').textContent = `(last refreshed ${new Date().toLocaleTimeString()})`;
         } catch (e) {
             console.error('Failed loading logs', e);
         }
@@ -424,18 +864,29 @@
     async function searchLogs() {
         const traceId = document.getElementById('traceInput').value.trim();
         if (!traceId) {
+            searchMode = false;
+            logCursor = 0;
             refreshAll();
             return;
         }
         try {
+            searchMode = true;
             const response = await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`);
             const payload = await response.json();
             logs = payload.logs || [];
+            currentPage = 1;
             metrics = payload.metrics || null;
+            loggerStats = payload.logger || null;
             updateResourceTrend();
             renderMetrics();
-            renderLogsTable();
+            applyLogFilters();
             renderCharts();
+
+             if (logs.length > 0) {
+                openDetails(JSON.stringify(logs[0]));
+            } else {
+                showCopyToast('No logs found for that trace ID');
+            }
         } catch (e) {
             console.error('Search failed', e);
         }
@@ -447,9 +898,40 @@
         }
     });
 
+    function startPolling() {
+        if (refreshTimerId !== null) {
+            return;
+        }
+        refreshTimerId = setInterval(() => {
+            refreshAll();
+        }, uiRefreshSeconds * 1000);
+    }
+
+    function stopPolling() {
+        if (refreshTimerId === null) {
+            return;
+        }
+        clearInterval(refreshTimerId);
+        refreshTimerId = null;
+    }
+
+    function handleVisibilityChange() {
+        const hidden = document.visibilityState === 'hidden';
+        isPollingPaused = hidden;
+        if (hidden) {
+            stopPolling();
+            return;
+        }
+        refreshAll();
+        startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     refreshAll();
     refreshPackages();
-    setInterval(refreshAll, uiRefreshSeconds * 1000);
+    toggleClearButton();
+    startPolling();
 </script>
 </body>
 </html>

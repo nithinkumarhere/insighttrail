@@ -1,5 +1,7 @@
 import logging
-from logging.handlers import RotatingFileHandler
+import queue
+import random
+from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from flask import g
 import traceback
 import os
@@ -8,11 +10,23 @@ import datetime
 import psutil
 import sys
 import threading
-import gc
 import platform
+import atexit
 
 # Configure the logger
 logger = logging.getLogger('insighttrail')
+_listener = None
+_log_queue = None
+_dropped_log_count = 0
+
+
+class NonBlockingQueueHandler(QueueHandler):
+    def enqueue(self, record):
+        global _dropped_log_count
+        try:
+            self.queue.put_nowait(record)
+        except queue.Full:
+            _dropped_log_count += 1
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
@@ -76,7 +90,16 @@ class JSONFormatter(logging.Formatter):
 
         return json.dumps(log_entry)
 
-def setup_logger(log_file, log_level_str, max_file_size, backup_count):
+def shutdown_logger():
+    global _listener
+    if _listener is not None:
+        _listener.stop()
+        _listener = None
+
+
+def setup_logger(log_file, log_level_str, max_file_size, backup_count,
+                 async_logging=True, log_queue_size=5000):
+    global _listener, _log_queue
     log_directory = os.path.dirname(log_file)
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
@@ -91,15 +114,48 @@ def setup_logger(log_file, log_level_str, max_file_size, backup_count):
     logger.setLevel(log_level)
     logger.propagate = False
 
-    has_same_handler = False
-    for existing_handler in logger.handlers:
-        if isinstance(existing_handler, RotatingFileHandler):
-            if getattr(existing_handler, 'baseFilename', None) == rotating_handler.baseFilename:
-                has_same_handler = True
-                break
+    for existing_handler in list(logger.handlers):
+        logger.removeHandler(existing_handler)
 
-    if not has_same_handler:
+    if _listener is not None:
+        _listener.stop()
+        _listener = None
+
+    if async_logging:
+        _log_queue = queue.Queue(maxsize=max(100, int(log_queue_size)))
+        queue_handler = NonBlockingQueueHandler(_log_queue)
+        queue_handler.setLevel(log_level)
+        logger.addHandler(queue_handler)
+        _listener = QueueListener(_log_queue, rotating_handler, respect_handler_level=True)
+        _listener.start()
+        atexit.register(shutdown_logger)
+    else:
         logger.addHandler(rotating_handler)
+
+
+def get_logger_stats():
+    queue_depth = 0
+    if _log_queue is not None:
+        queue_depth = _log_queue.qsize()
+    return {
+        "queue_depth": queue_depth,
+        "dropped_log_count": _dropped_log_count,
+        "async_logging_enabled": _listener is not None,
+    }
+
+
+def should_log_success(duration_seconds, success_log_sample_rate=1.0, slow_request_threshold_ms=None):
+    if slow_request_threshold_ms is not None:
+        duration_ms = duration_seconds * 1000.0
+        if duration_ms >= float(slow_request_threshold_ms):
+            return True
+
+    rate = float(success_log_sample_rate)
+    if rate >= 1.0:
+        return True
+    if rate <= 0.0:
+        return False
+    return random.random() < rate
 
 def get_system_metrics():
     """Get essential system metrics."""

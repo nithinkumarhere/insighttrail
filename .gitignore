@@ -42,4 +42,5 @@ node_modules
 .idea
 
 # github
-.github
+.github/
+__pycache__/

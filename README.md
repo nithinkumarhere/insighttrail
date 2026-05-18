@@ -9,16 +9,21 @@ InsightTrail is a lightweight observability package for Python web services. It 
 It supports both Flask and FastAPI with a single import:
 
 ```python
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 ```
 
 ## What Is New
-- Common API for Flask and FastAPI (`InsightTrail(app, ...)`)
+- Common API for Flask and FastAPI (`InsightTrailMiddleware(app, ...)`)
 - Dashboard is isolated to `url_prefix` (default `/insight`) and no longer collides with host app `/`
 - Lightweight UI stack: Milligram + uPlot (removed Bootstrap, DataTables, jQuery, Chart.js)
 - Internal dashboard requests can be excluded from logs/metrics (enabled by default)
 - Safer defaults for sensitive data capture
 - Ultra-light mode for minimal overhead in production
+- Incremental log tailing + paginated analytics API
+- Dependency optimization: TTL cache + optional background refresh
+- Dashboard polling pauses automatically when browser tab is hidden
+- Logger health is exposed in UI (`queue_depth`, `dropped_log_count`)
+- Excel report export (`.xlsx`) with preset/custom UTC date ranges
 
 ## Key Features
 - Request tracing with per-request `trace_id`
@@ -48,10 +53,10 @@ pip install -e .
 
 ```python
 from flask import Flask
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 
 app = Flask(__name__)
-InsightTrail(app)
+InsightTrailMiddleware(app)
 
 @app.route('/')
 def home():
@@ -62,10 +67,10 @@ def home():
 
 ```python
 from fastapi import FastAPI
-from insighttrail import InsightTrail
+from insighttrail import InsightTrailMiddleware
 
 app = FastAPI()
-InsightTrail(app)
+InsightTrailMiddleware(app)
 
 @app.get('/')
 def home():
@@ -77,7 +82,7 @@ Open `http://localhost:8000/insight/` (or your configured prefix).
 ## Configuration
 
 ```python
-InsightTrail(
+InsightTrailMiddleware(
     app,
     log_file='logs/insighttrail.log',
     log_level='INFO',
@@ -94,6 +99,16 @@ InsightTrail(
     enable_charts=None,
     ui_refresh_seconds=10,
     track_internal_requests=False,
+    async_logging=True,
+    log_queue_size=5000,
+    success_log_sample_rate=1.0,
+    slow_request_threshold_ms=None,
+    dependency_cache_ttl_seconds=21600,
+    dependency_async_refresh=True,
+    dependency_request_timeout=2,
+    enable_excel_reports=True,
+    report_max_rows=200000,
+    report_timezone='UTC',
 )
 ```
 
@@ -106,7 +121,7 @@ InsightTrail(
 ### Ultra-Light Mode
 
 ```python
-InsightTrail(app, ultra_light_mode=True)
+InsightTrailMiddleware(app, ultra_light_mode=True)
 ```
 
 When `ultra_light_mode=True`:
@@ -114,6 +129,20 @@ When `ultra_light_mode=True`:
 - charts are disabled by default
 
 You can still explicitly override with `dependency_check=True` or `enable_charts=True`.
+
+### Sampling
+
+```python
+InsightTrailMiddleware(
+    app,
+    success_log_sample_rate=0.2,
+    slow_request_threshold_ms=300,
+)
+```
+
+- `success_log_sample_rate` applies to successful requests only
+- error responses are always logged
+- requests slower than `slow_request_threshold_ms` are always logged
 
 ## Configuration Options
 
@@ -134,6 +163,16 @@ You can still explicitly override with `dependency_check=True` or `enable_charts
 | `enable_charts` | `bool \| None` | `None` | Enable/disable charts; resolved by `ultra_light_mode` if `None`. |
 | `ui_refresh_seconds` | `int` | `10` | Dashboard auto-refresh interval (minimum 2). |
 | `track_internal_requests` | `bool` | `False` | Include `/insight` internal API calls in logs and metrics. |
+| `async_logging` | `bool` | `True` | Use queue-based non-blocking log writes. |
+| `log_queue_size` | `int` | `5000` | Max in-memory queue size for async logging. |
+| `success_log_sample_rate` | `float` | `1.0` | Sampling rate for successful requests (0.0-1.0). |
+| `slow_request_threshold_ms` | `float \| None` | `None` | Always log requests slower than this threshold. |
+| `dependency_cache_ttl_seconds` | `int` | `21600` | TTL for cached package latest-version metadata (seconds). |
+| `dependency_async_refresh` | `bool` | `True` | Refresh stale dependency metadata in background thread. |
+| `dependency_request_timeout` | `int` | `2` | Timeout (seconds) for each dependency metadata request. |
+| `enable_excel_reports` | `bool` | `True` | Enable Excel report export endpoint and UI action. |
+| `report_max_rows` | `int` | `200000` | Maximum rows included in a generated report. |
+| `report_timezone` | `str` | `'UTC'` | Report time basis label (current implementation uses UTC). |
 
 ## Dashboard
 The dashboard includes:
@@ -141,10 +180,73 @@ The dashboard includes:
 - process metrics (pid, workers, threads, connections, cores)
 - latency trend and CPU/memory trend charts (when enabled)
 - request log table with details modal tabs (Request/Error/Runtime/System)
+- sticky headers, error-row highlighting, and click-to-copy trace IDs
 - dependency status with filters:
   - stable/pre-release
   - required/optional
   - text search
+- incremental log loading using cursor-based API polling
+- visibility-aware polling pause/resume
+
+## Logger Health
+- Async queue-based logging exposes health metrics in analytics responses:
+  - `logger.queue_depth`
+  - `logger.dropped_log_count`
+  - `logger.async_logging_enabled`
+
+Use these values to detect backpressure and tune `log_queue_size`.
+
+## Analytics API
+- `GET /insight/api/analytics/logs?limit=150&cursor=<id>`
+  - returns only new log entries when cursor is provided
+  - response includes `cursor`, `has_more`, `logs`, `metrics`, and `logger`
+- `GET /insight/api/logs?limit=100&cursor=<id>`
+  - raw paged log access
+
+Example analytics response shape:
+
+```json
+{
+  "logs": [],
+  "cursor": 1234,
+  "has_more": false,
+  "metrics": {},
+  "logger": {
+    "queue_depth": 0,
+    "dropped_log_count": 0,
+    "async_logging_enabled": true
+  }
+}
+```
+
+## Dependency Metadata
+- Latest-version checks now use a TTL cache (`dependency_cache_ttl_seconds`).
+- With `dependency_async_refresh=True`, stale entries are refreshed in background to avoid blocking UI requests.
+- Use `dependency_request_timeout` to cap per-package lookup latency.
+
+## Excel Reports
+- Export endpoint: `GET /insight/api/reports/excel`
+- Preset range export:
+  - `?preset=1d`
+  - `?preset=7d`
+  - `?preset=1m`
+  - `?preset=6m`
+- Custom range export:
+  - `?start=2026-01-01T00:00:00Z&end=2026-01-07T23:59:59Z`
+- Optional sheet selection:
+  - `?include=summary,requests,errors,dependencies`
+
+Generated workbook sheets:
+- `Summary`
+- `Requests`
+- `Errors`
+- `Dependencies`
+
+Dashboard export modal supports:
+- preset ranges and custom date range
+- selecting which sheets to include
+- estimated row count preview before download
+- disabled state and loading indicator while report is generated
 
 ## Log Format
 
