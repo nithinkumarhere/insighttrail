@@ -41,8 +41,6 @@ node_modules
 #IDE
 .idea
 
-# github
-.github/
 __pycache__/
 
 # uv
