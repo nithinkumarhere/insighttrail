@@ -717,6 +717,7 @@
     let refreshTimerId = null, isPollingPaused = false, toastTimerId = null;
     let currentPage = 1, pageSize = 50, filteredLogs = [], packagesData = [];
     let latencyPlot = null, resourcePlot = null, resourceTrend = [];
+    let logEntries = [];
 
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
@@ -795,7 +796,7 @@
         const totalRows = orderedLogs.length, totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
         currentPage = Math.max(1, Math.min(currentPage, totalPages));
         const pageRows = orderedLogs.slice((currentPage-1)*pageSize, (currentPage-1)*pageSize + pageSize);
-        body.innerHTML = pageRows.map(log => {
+        body.innerHTML = pageRows.map((log, idx) => {
             const status = log.request?.status || 0, badgeClass = status >= 400 ? 'err' : 'ok';
             return `<tr>
                 <td class="px-3 py-2 whitespace-nowrap">${log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
@@ -805,10 +806,11 @@
                 <td class="px-3 py-2"><span class="status ${badgeClass}">${status || '-'}</span></td>
                 <td class="px-3 py-2">${(log.request?.duration_ms || 0).toFixed(2)}ms</td>
                 <td class="px-3 py-2">${log.request?.client || '-'}</td>
-                <td class="px-3 py-2"><button class="btn btn-ghost rounded-md px-2 py-1 text-xs" onclick='openDetails(${JSON.stringify(JSON.stringify(log))})'>View</button></td>
+                <td class="px-3 py-2"><button class="btn btn-ghost rounded-md px-2 py-1 text-xs" onclick="openDetails(${(currentPage-1)*pageSize+idx})">View</button></td>
             </tr>`;
         }).join('');
         const rows = body.querySelectorAll('tr');
+        pageRows.forEach((log, idx) => { logEntries[(currentPage-1)*pageSize+idx] = log; });
         pageRows.forEach((log, idx) => { if ((log.request?.status || 0) >= 400 && rows[idx]) rows[idx].classList.add('error-row'); });
         document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages}`;
         document.getElementById('prevPageBtn').disabled = currentPage <= 1; document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
@@ -880,7 +882,7 @@
         finally { setExportButtonLoading(false); }
     }
 
-    function openDetails(logJsonString){
+    function openDetails(index){
         const modal = document.getElementById('logModal');
         const loading = document.getElementById('modalLoading');
         const content = document.getElementById('modalContentWrap');
@@ -889,7 +891,7 @@
         content.style.display = 'none';
 
         window.setTimeout(() => {
-            const log = JSON.parse(logJsonString);
+            const log = logEntries[index] || {};
             document.getElementById('modalRequest').textContent = JSON.stringify(log.request || {}, null, 2);
             document.getElementById('modalError').textContent = JSON.stringify(log.error || {message:'No error'}, null, 2);
             document.getElementById('modalRuntime').textContent = JSON.stringify(log.runtime || {message:'Runtime capture disabled'}, null, 2);
@@ -929,7 +931,7 @@
 
     async function refreshAll(){ if(searchMode||isPollingPaused) return; try { setRefreshing(true); const response=await fetch(`${insightBaseUrl}/api/analytics/logs?limit=150&cursor=${encodeURIComponent(logCursor)}`), payload=await response.json(); const incoming=payload.logs||[]; if(logCursor&&incoming.length) logs=logs.concat(incoming); else if(!logCursor){ logs=incoming; currentPage=1; } if(logs.length>500) logs=logs.slice(logs.length-500); metrics=payload.metrics||null; loggerStats=payload.logger||null; logCursor=Number(payload.cursor||logCursor||0); updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); document.getElementById('lastRefresh').textContent=`(last refreshed ${new Date().toLocaleTimeString()})`; } catch(e){ console.error('Failed loading logs', e); } finally { setRefreshing(false); } }
 
-    async function searchLogs(){ const traceId=document.getElementById('traceInput').value.trim(); if(!traceId){ searchMode=false; logCursor=0; refreshAll(); return; } try { setRefreshing(true); searchMode=true; const response=await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`), payload=await response.json(); logs=payload.logs||[]; currentPage=1; metrics=payload.metrics||null; loggerStats=payload.logger||null; updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); if(logs.length>0) openDetails(JSON.stringify(logs[0])); else showCopyToast('No logs found for that trace ID'); } catch(e){ console.error('Search failed', e); } finally { setRefreshing(false); } }
+    async function searchLogs(){ const traceId=document.getElementById('traceInput').value.trim(); if(!traceId){ searchMode=false; logCursor=0; refreshAll(); return; } try { setRefreshing(true); searchMode=true; const response=await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`), payload=await response.json(); logs=payload.logs||[]; currentPage=1; metrics=payload.metrics||null; loggerStats=payload.logger||null; updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); if(logs.length>0){ logEntries[0]=logs[0]; openDetails(0); } else showCopyToast('No logs found for that trace ID'); } catch(e){ console.error('Search failed', e); } finally { setRefreshing(false); } }
 
     window.addEventListener('resize', ()=>{ if(latencyPlot||resourcePlot) renderCharts(); });
     function startPolling(){ if(refreshTimerId!==null) return; refreshTimerId=setInterval(()=>refreshAll(), uiRefreshSeconds*1000); }

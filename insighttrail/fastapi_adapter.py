@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import traceback
 import uuid
 import threading
 import glob
@@ -85,6 +86,7 @@ class _FastAPIInsightMiddleware(BaseHTTPMiddleware):
                 "client": request.client.host if request.client else None,
                 "error": str(exc),
                 "error_type": exc.__class__.__name__,
+                "traceback": ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
                 "runtime_info": get_runtime_info(
                     capture_env_vars=self.capture_env_vars,
                     env_allowlist=self.env_allowlist,
