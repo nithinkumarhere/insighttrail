@@ -1,14 +1,12 @@
 from flask import request, g, jsonify, render_template, Blueprint, send_file
 import time
 import os
-import json
 import threading
-import glob
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from collections import deque
 from .logger import setup_logger, log_request, log_error, get_logger_stats, should_log_success
 from .metrics import record_metrics, get_metrics
+from .storage import create_log_store
 from .traces import trace_request
 import pkg_resources
 import requests
@@ -25,7 +23,8 @@ class InsightTrailMiddleware:
                  success_log_sample_rate=1.0, slow_request_threshold_ms=None,
                  dependency_cache_ttl_seconds=21600, dependency_async_refresh=True,
                  dependency_request_timeout=2, enable_excel_reports=True,
-                 report_max_rows=200000, report_timezone='UTC'):
+                 report_max_rows=200000, report_timezone='UTC',
+                 log_storage='file', db_config=None):
         """
         Initialize InsightTrail middleware.
 
@@ -46,6 +45,8 @@ class InsightTrailMiddleware:
         self.url_prefix = '/' + url_prefix.strip('/') if url_prefix else '/insight'
         self.track_internal_requests = track_internal_requests
         self.async_logging = async_logging
+        self.log_storage = (log_storage or 'file').lower()
+        self.db_config = db_config
         self.log_queue_size = max(100, int(log_queue_size))
         self.success_log_sample_rate = max(0.0, min(1.0, float(success_log_sample_rate)))
         self.slow_request_threshold_ms = float(slow_request_threshold_ms) if slow_request_threshold_ms is not None else None
@@ -60,26 +61,28 @@ class InsightTrailMiddleware:
         self.enable_charts = (not ultra_light_mode) if enable_charts is None else enable_charts
         self.ui_refresh_seconds = max(2, int(ui_refresh_seconds))
         self.required_packages = self._load_required_packages(app.root_path)
-        self._log_cache = deque(maxlen=3000)
-        self._log_file_offset = 0
-        self._next_log_id = 1
         self._dependency_cache = {}
         self._dependency_refresh_in_progress = False
-        
-        if log_file is None:
+
+        if self.log_storage == 'file' and log_file is None:
             # Default to a 'logs' directory in the parent of the app's root path
             app_parent_dir = os.path.dirname(app.root_path)
             log_file = os.path.join(app_parent_dir, 'logs', 'insighttrail.log')
 
+        self.log_file = log_file
+        self.log_store = create_log_store(self.log_storage, log_file=self.log_file, db_config=self.db_config)
+
         setup_logger(
-            log_file,
+            self.log_file,
             log_level,
             max_file_size,
             backup_count,
             async_logging=self.async_logging,
             log_queue_size=self.log_queue_size,
+            log_storage=self.log_storage,
+            db_config=self.db_config,
+            db_log_store=self.log_store if self.log_storage == 'db' else None,
         )
-        self.log_file = log_file
         self._init_app(app)
 
         if enable_ui:
@@ -265,56 +268,14 @@ class InsightTrailMiddleware:
                 )
 
     def _parse_log_file(self):
-        self._refresh_log_cache()
-        return list(self._log_cache)
+        return self.log_store.all_cached() if hasattr(self.log_store, 'all_cached') else []
 
     def _refresh_log_cache(self):
-        try:
-            if not os.path.exists(self.log_file):
-                return
-
-            current_size = os.path.getsize(self.log_file)
-            if current_size < self._log_file_offset:
-                self._log_file_offset = 0
-                self._log_cache.clear()
-                self._next_log_id = 1
-
-            with open(self.log_file, 'r', encoding='utf-8', errors='replace') as f:
-                f.seek(self._log_file_offset)
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        log_entry = json.loads(line)
-                        log_entry['_id'] = self._next_log_id
-                        self._next_log_id += 1
-                        self._log_cache.append(log_entry)
-                    except (json.JSONDecodeError, ValueError):
-                        continue
-                self._log_file_offset = f.tell()
-        except Exception as e:
-            print(f"Error reading log file: {e}")
+        if hasattr(self.log_store, '_refresh_log_cache'):
+            self.log_store._refresh_log_cache()
 
     def _get_logs_page(self, limit=100, cursor=None):
-        self._refresh_log_cache()
-        max_limit = 500
-        safe_limit = max(1, min(int(limit), max_limit))
-        logs = list(self._log_cache)
-
-        if cursor is not None:
-            cursor_id = int(cursor)
-            filtered = [log for log in logs if int(log.get('_id', 0)) > cursor_id]
-            page = filtered[:safe_limit]
-        else:
-            page = logs[-safe_limit:]
-
-        next_cursor = page[-1]['_id'] if page else (cursor if cursor is not None else 0)
-        return {
-            'logs': page,
-            'cursor': next_cursor,
-            'has_more': len(logs) > len(page) if cursor is None else False,
-        }
+        return self.log_store.get_page(limit=limit, cursor=cursor)
 
     def _setup_ui(self, normalized_prefix):
         # Create a blueprint for InsightTrail UI
@@ -370,9 +331,7 @@ class InsightTrailMiddleware:
         def search_by_trace_id():
             try:
                 trace_id = request.args.get('trace_id')
-                self._refresh_log_cache()
-                logs = list(self._log_cache)
-                result = [log for log in logs if log.get("trace_id") == trace_id]
+                result = self.log_store.search_by_trace_id(trace_id)
                 metrics = get_metrics()
                 return jsonify({
                     'logs': result,
@@ -467,66 +426,11 @@ class InsightTrailMiddleware:
             dt = dt.replace(tzinfo=self._local_tz())
         return dt.astimezone(self._local_tz())
 
-    def _log_files(self):
-        log_dir = os.path.dirname(self.log_file) or '.'
-        base_name = os.path.basename(self.log_file)
-        files = glob.glob(os.path.join(log_dir, f"{base_name}*"))
-        return sorted([f for f in files if os.path.isfile(f)], key=os.path.getmtime)
-
     def _collect_logs_for_range(self, start_dt, end_dt):
-        rows = []
-        for file_path in self._log_files():
-            try:
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as handle:
-                    for line in handle:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                            ts_raw = entry.get('timestamp')
-                            if not ts_raw:
-                                continue
-                            ts = self._parse_utc_iso(ts_raw)
-                            if start_dt <= ts <= end_dt:
-                                entry['_parsed_ts'] = ts
-                                rows.append(entry)
-                                if len(rows) >= self.report_max_rows:
-                                    break
-                        except Exception:
-                            continue
-                if len(rows) >= self.report_max_rows:
-                    break
-            except IOError:
-                continue
-
-        rows.sort(key=lambda r: r.get('_parsed_ts', datetime.min.replace(tzinfo=timezone.utc)))
-        return rows
+        return self.log_store.collect_for_range(start_dt, end_dt, self._parse_utc_iso, self.report_max_rows)
 
     def _estimate_logs_for_range(self, start_dt, end_dt):
-        count = 0
-        for file_path in self._log_files():
-            try:
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as handle:
-                    for line in handle:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                            ts_raw = entry.get('timestamp')
-                            if not ts_raw:
-                                continue
-                            ts = self._parse_utc_iso(ts_raw)
-                            if start_dt <= ts <= end_dt:
-                                count += 1
-                                if count >= self.report_max_rows:
-                                    return count
-                        except Exception:
-                            continue
-            except IOError:
-                continue
-        return count
+        return self.log_store.estimate_for_range(start_dt, end_dt, self._parse_utc_iso, self.report_max_rows)
 
     def _build_excel_report(self, rows, start_dt, end_dt, include_sheets):
         workbook = Workbook()

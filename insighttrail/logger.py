@@ -28,67 +28,79 @@ class NonBlockingQueueHandler(QueueHandler):
         except queue.Full:
             _dropped_log_count += 1
 
-class JSONFormatter(logging.Formatter):
-    def format(self, record):
-        # Get basic request info
-        log_entry = {
-            "trace_id": getattr(record, "trace_id", None),
-            "timestamp": datetime.datetime.fromtimestamp(record.created).isoformat(),
-            "level": record.levelname,
-            "request": {
-                "method": getattr(record, "request_method", None),
-                "path": getattr(record, "request_path", None),
-                "status": getattr(record, "status", None),
-                "duration_ms": getattr(record, "duration", 0) * 1000 if getattr(record, "duration", None) else None,
-                "client": getattr(record, "client", None)
+def build_log_entry(record):
+    log_entry = {
+        "trace_id": getattr(record, "trace_id", None),
+        "timestamp": datetime.datetime.fromtimestamp(record.created).isoformat(),
+        "level": record.levelname,
+        "request": {
+            "method": getattr(record, "request_method", None),
+            "path": getattr(record, "request_path", None),
+            "status": getattr(record, "status", None),
+            "duration_ms": getattr(record, "duration", 0) * 1000 if getattr(record, "duration", None) else None,
+            "client": getattr(record, "client", None)
+        }
+    }
+
+    error = getattr(record, "error", None)
+    if error:
+        log_entry["error"] = {
+            "type": getattr(record, "error_type", None),
+            "message": error,
+            "traceback": getattr(record, "traceback", None)
+        }
+
+    runtime_info = getattr(record, "runtime_info", None)
+    if runtime_info:
+        log_entry["runtime"] = {
+            "python": {
+                "version": runtime_info.get("python", {}).get("version"),
+                "implementation": runtime_info.get("python", {}).get("implementation"),
+                "thread_count": runtime_info.get("python", {}).get("thread_count")
+            },
+            "process": {
+                "pid": runtime_info.get("process", {}).get("pid"),
+                "memory_mb": runtime_info.get("process", {}).get("memory_info", {}).get("rss", 0) / (1024 * 1024),
+                "cpu_percent": runtime_info.get("process", {}).get("cpu_percent")
+            },
+            "env_vars": runtime_info.get("environment", {}).get("vars", {})
+        }
+
+    system_metrics = getattr(record, "system_metrics", None)
+    if system_metrics:
+        log_entry["system"] = {
+            "cpu": {
+                "percent": system_metrics.get("cpu", {}).get("percent"),
+                "count": system_metrics.get("cpu", {}).get("count")
+            },
+            "memory": {
+                "percent": system_metrics.get("memory", {}).get("percent"),
+                "available_gb": system_metrics.get("memory", {}).get("available", 0) / (1024 * 1024 * 1024)
+            },
+            "disk": {
+                "percent": system_metrics.get("disk", {}).get("percent"),
+                "free_gb": system_metrics.get("disk", {}).get("free", 0) / (1024 * 1024 * 1024)
             }
         }
 
-        # Add error information if present
-        error = getattr(record, "error", None)
-        if error:
-            log_entry["error"] = {
-                "type": getattr(record, "error_type", None),
-                "message": error,
-                "traceback": getattr(record, "traceback", None)
-            }
+    return log_entry
 
-        # Add runtime metrics if present
-        runtime_info = getattr(record, "runtime_info", None)
-        if runtime_info:
-            log_entry["runtime"] = {
-                "python": {
-                    "version": runtime_info.get("python", {}).get("version"),
-                    "implementation": runtime_info.get("python", {}).get("implementation"),
-                    "thread_count": runtime_info.get("python", {}).get("thread_count")
-                },
-                "process": {
-                    "pid": runtime_info.get("process", {}).get("pid"),
-                    "memory_mb": runtime_info.get("process", {}).get("memory_info", {}).get("rss", 0) / (1024 * 1024),
-                    "cpu_percent": runtime_info.get("process", {}).get("cpu_percent")
-                },
-                "env_vars": runtime_info.get("environment", {}).get("vars", {})
-            }
 
-        # Add system metrics if present
-        system_metrics = getattr(record, "system_metrics", None)
-        if system_metrics:
-            log_entry["system"] = {
-                "cpu": {
-                    "percent": system_metrics.get("cpu", {}).get("percent"),
-                    "count": system_metrics.get("cpu", {}).get("count")
-                },
-                "memory": {
-                    "percent": system_metrics.get("memory", {}).get("percent"),
-                    "available_gb": system_metrics.get("memory", {}).get("available", 0) / (1024 * 1024 * 1024)
-                },
-                "disk": {
-                    "percent": system_metrics.get("disk", {}).get("percent"),
-                    "free_gb": system_metrics.get("disk", {}).get("free", 0) / (1024 * 1024 * 1024)
-                }
-            }
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps(build_log_entry(record))
 
-        return json.dumps(log_entry)
+
+class SQLAlchemyLogHandler(logging.Handler):
+    def __init__(self, log_store):
+        super().__init__()
+        self.log_store = log_store
+
+    def emit(self, record):
+        try:
+            self.log_store.write(build_log_entry(record))
+        except Exception:
+            self.handleError(record)
 
 def shutdown_logger():
     global _listener
@@ -98,18 +110,27 @@ def shutdown_logger():
 
 
 def setup_logger(log_file, log_level_str, max_file_size, backup_count,
-                 async_logging=True, log_queue_size=5000):
+                 async_logging=True, log_queue_size=5000,
+                 log_storage='file', db_config=None, db_log_store=None):
     global _listener, _log_queue
-    log_directory = os.path.dirname(log_file)
-    if not os.path.exists(log_directory):
-        os.makedirs(log_directory)
-
     # Map log level string to logging constant
     log_level = getattr(logging, log_level_str.upper(), logging.INFO)
 
-    rotating_handler = RotatingFileHandler(log_file, maxBytes=max_file_size, backupCount=backup_count)
-    rotating_handler.setLevel(log_level)
-    rotating_handler.setFormatter(JSONFormatter())
+    storage = (log_storage or 'file').lower()
+    if storage == 'db':
+        if db_log_store is None:
+            from .storage import SQLAlchemyLogStore
+            db_log_store = SQLAlchemyLogStore(db_config)
+        target_handler = SQLAlchemyLogHandler(db_log_store)
+    elif storage == 'file':
+        log_directory = os.path.dirname(log_file)
+        if log_directory and not os.path.exists(log_directory):
+            os.makedirs(log_directory)
+        target_handler = RotatingFileHandler(log_file, maxBytes=max_file_size, backupCount=backup_count)
+        target_handler.setFormatter(JSONFormatter())
+    else:
+        raise ValueError("log_storage must be either 'file' or 'db'.")
+    target_handler.setLevel(log_level)
 
     logger.setLevel(log_level)
     logger.propagate = False
@@ -120,17 +141,18 @@ def setup_logger(log_file, log_level_str, max_file_size, backup_count,
     if _listener is not None:
         _listener.stop()
         _listener = None
+    _log_queue = None
 
     if async_logging:
         _log_queue = queue.Queue(maxsize=max(100, int(log_queue_size)))
         queue_handler = NonBlockingQueueHandler(_log_queue)
         queue_handler.setLevel(log_level)
         logger.addHandler(queue_handler)
-        _listener = QueueListener(_log_queue, rotating_handler, respect_handler_level=True)
+        _listener = QueueListener(_log_queue, target_handler, respect_handler_level=True)
         _listener.start()
         atexit.register(shutdown_logger)
     else:
-        logger.addHandler(rotating_handler)
+        logger.addHandler(target_handler)
 
 
 def get_logger_stats():
