@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-scheme="catppuccin" data-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.min.css">
     {% endif %}
     <style>
+        /* ── Orange scheme (default) ── */
         :root {
             --bg: #fafaf7;
             --surface: #ffffff;
@@ -35,9 +36,30 @@
             --line-strong: #d6d3cc;
             --accent: #f97316;
             --accent-2: #fb923c;
+            --accent-rgb: 249, 115, 22;
             --accent-soft: rgba(249, 115, 22, 0.08);
             --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
             --shadow-md: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.03);
+            --grad-1: rgba(249, 115, 22, 0.20);
+            --grad-2: rgba(148, 163, 184, 0.16);
+            --grad-3: rgba(249, 115, 22, 0.16);
+            --grad-4: rgba(148, 163, 184, 0.14);
+            --grad-5: rgba(249, 115, 22, 0.06);
+            --grid-color: rgba(15, 23, 42, 0.07);
+            --chip-green-bg: rgba(21, 128, 61, 0.12);
+            --chip-green-text: #15803d;
+            --chip-yellow-bg: rgba(212, 160, 23, 0.14);
+            --chip-yellow-text: #a16207;
+            --status-ok-bg: rgba(21, 128, 61, 0.12);
+            --status-ok-text: #15803d;
+            --status-err-bg: rgba(180, 35, 24, 0.12);
+            --status-err-text: #b42318;
+            --error-row-bg: rgba(180, 35, 24, 0.04);
+            --shadow-btn: rgba(249, 115, 22, 0.25);
+            --shadow-ecg: rgba(249, 115, 22, 0.45);
+            --shadow-mem: rgba(249, 115, 22, 0.25);
+            --modal-backdrop: rgba(15, 23, 42, 0.40);
+            --modal-shadow: rgba(15, 23, 42, 0.18);
         }
         [data-theme="dark"] {
             --bg: #1c1f24;
@@ -49,10 +71,104 @@
             --line-strong: #424852;
             --accent: #f97316;
             --accent-2: #fb923c;
+            --accent-rgb: 249, 115, 22;
             --accent-soft: rgba(249, 115, 22, 0.12);
             --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
             --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.25);
+            --grad-1: rgba(249, 115, 22, 0.18);
+            --grad-2: rgba(100, 116, 139, 0.18);
+            --grad-3: rgba(249, 115, 22, 0.14);
+            --grad-4: rgba(100, 116, 139, 0.14);
+            --grad-5: rgba(249, 115, 22, 0.05);
+            --grid-color: rgba(255, 255, 255, 0.08);
+            --chip-green-bg: rgba(34, 197, 94, 0.16);
+            --chip-green-text: #4ade80;
+            --chip-yellow-bg: rgba(234, 179, 8, 0.16);
+            --chip-yellow-text: #facc15;
+            --status-ok-bg: rgba(34, 197, 94, 0.16);
+            --status-ok-text: #4ade80;
+            --status-err-bg: rgba(239, 68, 68, 0.16);
+            --status-err-text: #f87171;
+            --error-row-bg: rgba(239, 68, 68, 0.06);
+            --shadow-btn: rgba(249, 115, 22, 0.25);
+            --shadow-ecg: rgba(249, 115, 22, 0.45);
+            --shadow-mem: rgba(249, 115, 22, 0.25);
+            --modal-backdrop: rgba(0, 0, 0, 0.55);
+            --modal-shadow: rgba(0, 0, 0, 0.35);
         }
+
+        /* ── Catppuccin scheme ── */
+        [data-scheme="catppuccin"] {
+            --bg: #eff1f5;
+            --surface: #e6e9ef;
+            --surface-2: #ccd0da;
+            --text: #4c4f69;
+            --muted: #6c6f85;
+            --line: #bcc0cc;
+            --line-strong: #acb0be;
+            --accent: #5488e0;
+            --accent-2: #89b4fa;
+            --accent-rgb: 84, 136, 224;
+            --accent-soft: rgba(84, 136, 224, 0.08);
+            --shadow-sm: 0 1px 2px rgba(76, 79, 105, 0.06);
+            --shadow-md: 0 1px 3px rgba(76, 79, 105, 0.10), 0 1px 2px rgba(76, 79, 105, 0.06);
+            --grad-1: rgba(84, 136, 224, 0.15);
+            --grad-2: rgba(124, 127, 147, 0.12);
+            --grad-3: rgba(84, 136, 224, 0.12);
+            --grad-4: rgba(124, 127, 147, 0.10);
+            --grad-5: rgba(84, 136, 224, 0.05);
+            --grid-color: rgba(76, 79, 105, 0.06);
+            --chip-green-bg: rgba(64, 160, 43, 0.12);
+            --chip-green-text: #40a02b;
+            --chip-yellow-bg: rgba(223, 142, 29, 0.14);
+            --chip-yellow-text: #df8e1d;
+            --status-ok-bg: rgba(64, 160, 43, 0.12);
+            --status-ok-text: #40a02b;
+            --status-err-bg: rgba(210, 15, 57, 0.12);
+            --status-err-text: #d20f39;
+            --error-row-bg: rgba(210, 15, 57, 0.06);
+            --shadow-btn: rgba(84, 136, 224, 0.25);
+            --shadow-ecg: rgba(84, 136, 224, 0.35);
+            --shadow-mem: rgba(84, 136, 224, 0.25);
+            --modal-backdrop: rgba(76, 79, 105, 0.45);
+            --modal-shadow: rgba(76, 79, 105, 0.18);
+        }
+        [data-scheme="catppuccin"][data-theme="dark"] {
+            --bg: #1e1e2e;
+            --surface: #313244;
+            --surface-2: #45475a;
+            --text: #cdd6f4;
+            --muted: #a6adc8;
+            --line: #45475a;
+            --line-strong: #585b70;
+            --accent: #5488e0;
+            --accent-2: #89b4fa;
+            --accent-rgb: 84, 136, 224;
+            --accent-soft: rgba(84, 136, 224, 0.12);
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+            --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.25);
+            --grad-1: rgba(84, 136, 224, 0.18);
+            --grad-2: rgba(147, 155, 178, 0.15);
+            --grad-3: rgba(84, 136, 224, 0.14);
+            --grad-4: rgba(147, 155, 178, 0.12);
+            --grad-5: rgba(84, 136, 224, 0.05);
+            --grid-color: rgba(205, 214, 244, 0.06);
+            --chip-green-bg: rgba(166, 227, 161, 0.16);
+            --chip-green-text: #a6e3a1;
+            --chip-yellow-bg: rgba(249, 226, 175, 0.16);
+            --chip-yellow-text: #f9e2af;
+            --status-ok-bg: rgba(166, 227, 161, 0.16);
+            --status-ok-text: #a6e3a1;
+            --status-err-bg: rgba(243, 139, 168, 0.16);
+            --status-err-text: #f38ba8;
+            --error-row-bg: rgba(243, 139, 168, 0.08);
+            --shadow-btn: rgba(84, 136, 224, 0.30);
+            --shadow-ecg: rgba(84, 136, 224, 0.40);
+            --shadow-mem: rgba(84, 136, 224, 0.30);
+            --modal-backdrop: rgba(0, 0, 0, 0.55);
+            --modal-shadow: rgba(0, 0, 0, 0.35);
+        }
+
         body {
             font-family: "Google Sans Flex", ui-sans-serif, system-ui;
             color: var(--text);
@@ -70,11 +186,11 @@
             pointer-events: none;
             z-index: 0;
             background:
-                radial-gradient(900px 600px at 0% 0%, rgba(249, 115, 22, 0.20), transparent 60%),
-                radial-gradient(700px 500px at 100% 0%, rgba(148, 163, 184, 0.16), transparent 65%),
-                radial-gradient(800px 600px at 100% 100%, rgba(249, 115, 22, 0.16), transparent 60%),
-                radial-gradient(700px 500px at 0% 100%, rgba(148, 163, 184, 0.14), transparent 65%),
-                radial-gradient(600px 400px at 50% 50%, rgba(249, 115, 22, 0.06), transparent 70%);
+                radial-gradient(900px 600px at 0% 0%, var(--grad-1), transparent 60%),
+                radial-gradient(700px 500px at 100% 0%, var(--grad-2), transparent 65%),
+                radial-gradient(800px 600px at 100% 100%, var(--grad-3), transparent 60%),
+                radial-gradient(700px 500px at 0% 100%, var(--grad-4), transparent 65%),
+                radial-gradient(600px 400px at 50% 50%, var(--grad-5), transparent 70%);
         }
         body::after {
             content: "";
@@ -84,25 +200,11 @@
             z-index: 0;
             opacity: 0.9;
             background-image:
-                linear-gradient(rgba(15, 23, 42, 0.07) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(15, 23, 42, 0.07) 1px, transparent 1px);
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
             background-size: 44px 44px;
             mask-image: radial-gradient(ellipse 85% 75% at 50% 40%, black 55%, transparent 95%);
             -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 40%, black 55%, transparent 95%);
-        }
-        [data-theme="dark"] body::before {
-            background:
-                radial-gradient(900px 600px at 0% 0%, rgba(249, 115, 22, 0.18), transparent 60%),
-                radial-gradient(700px 500px at 100% 0%, rgba(100, 116, 139, 0.18), transparent 65%),
-                radial-gradient(800px 600px at 100% 100%, rgba(249, 115, 22, 0.14), transparent 60%),
-                radial-gradient(700px 500px at 0% 100%, rgba(100, 116, 139, 0.14), transparent 65%),
-                radial-gradient(600px 400px at 50% 50%, rgba(249, 115, 22, 0.05), transparent 70%);
-        }
-        [data-theme="dark"] body::after {
-            opacity: 0.75;
-            background-image:
-                linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
         }
 
         .panel {
@@ -178,7 +280,7 @@
         .btn-primary:hover {
             background: var(--accent-2);
             border-color: var(--accent-2);
-            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
+            box-shadow: 0 4px 12px var(--shadow-btn);
         }
         .btn-ghost {
             background: transparent;
@@ -229,7 +331,7 @@
             stroke-width: 1.5;
             stroke-linecap: round;
             stroke-linejoin: round;
-            filter: drop-shadow(0 0 2px rgba(249, 115, 22, 0.45));
+            filter: drop-shadow(0 0 2px var(--shadow-ecg));
             animation: ecgScroll 2.4s linear infinite;
         }
         @keyframes ecgScroll {
@@ -258,7 +360,7 @@
             transform-origin: bottom;
             animation: memBar 1.8s ease-in-out infinite;
             opacity: 0.85;
-            box-shadow: 0 0 4px rgba(249, 115, 22, 0.25);
+            box-shadow: 0 0 4px var(--shadow-mem);
         }
         .mem-bars span:nth-child(1) { height: 40%; animation-delay: 0s; }
         .mem-bars span:nth-child(2) { height: 70%; animation-delay: 0.15s; }
@@ -281,10 +383,8 @@
             font-weight: 500;
             letter-spacing: 0.01em;
         }
-        .chip-green { background: rgba(21, 128, 61, 0.12); color: #15803d; }
-        .chip-yellow { background: rgba(212, 160, 23, 0.14); color: #a16207; }
-        [data-theme="dark"] .chip-green { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
-        [data-theme="dark"] .chip-yellow { background: rgba(234, 179, 8, 0.16); color: #facc15; }
+        .chip-green { background: var(--chip-green-bg); color: var(--chip-green-text); }
+        .chip-yellow { background: var(--chip-yellow-bg); color: var(--chip-yellow-text); }
         .status {
             padding: 2px 9px;
             border-radius: 6px;
@@ -292,18 +392,15 @@
             font-weight: 500;
             letter-spacing: 0.01em;
         }
-        .ok { background: rgba(21, 128, 61, 0.12); color: #15803d; }
-        .err { background: rgba(180, 35, 24, 0.12); color: #b42318; }
-        [data-theme="dark"] .ok { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
-        [data-theme="dark"] .err { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+        .ok { background: var(--status-ok-bg); color: var(--status-ok-text); }
+        .err { background: var(--status-err-bg); color: var(--status-err-text); }
         .trace-copy {
             cursor: pointer;
             color: var(--muted);
             transition: color .15s ease;
         }
         .trace-copy:hover { color: var(--accent); }
-        .error-row { background: rgba(180, 35, 24, 0.04); }
-        [data-theme="dark"] .error-row { background: rgba(239, 68, 68, 0.06); }
+        .error-row { background: var(--error-row-bg); }
 
         .log-table-wrap {
             max-height: 420px;
@@ -346,7 +443,7 @@
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.40);
+            background: var(--modal-backdrop);
             backdrop-filter: blur(12px) saturate(140%);
             -webkit-backdrop-filter: blur(12px) saturate(140%);
             display: none;
@@ -369,7 +466,7 @@
             border: 1px solid var(--line);
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+            box-shadow: 0 20px 50px var(--modal-shadow);
             transform: translateY(12px) scale(.98);
             opacity: 0;
             transition: transform .24s ease, opacity .24s ease;
@@ -466,6 +563,10 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <button id="themeToggle" class="btn btn-ghost rounded-lg px-3 py-2 text-sm" onclick="toggleTheme()"><span class="btn-icon">🌗</span>Theme</button>
+                <select id="schemeSelect" onchange="applyScheme(this.value)" class="rounded-lg border px-3 py-2 text-sm" style="border-color:var(--line); background:var(--surface); color:var(--text)">
+                    <option value="catppuccin">Catppuccin</option>
+                    <option value="orange">Orange</option>
+                </select>
                 <div class="relative">
                     <input id="traceInput" type="text" placeholder="Search by trace id" oninput="toggleClearButton()" class="w-72 rounded-lg border px-3 py-2 pr-8 text-sm" style="border-color:var(--line); background:var(--surface)">
                     <button id="clearTraceBtn" type="button" onclick="clearTraceSearch()" class="absolute right-2 top-1/2 -translate-y-1/2" style="color:var(--muted)">&times;</button>
@@ -616,6 +717,7 @@
     let refreshTimerId = null, isPollingPaused = false, toastTimerId = null;
     let currentPage = 1, pageSize = 50, filteredLogs = [], packagesData = [];
     let latencyPlot = null, resourcePlot = null, resourceTrend = [];
+    let logEntries = [];
 
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
@@ -623,12 +725,22 @@
         renderCharts();
     }
     function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'light';
-        applyTheme(current === 'light' ? 'dark' : 'light');
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
     }
-    function initTheme() {
-        const stored = localStorage.getItem('insighttrail_theme') || 'light';
-        applyTheme(stored);
+    function applyScheme(scheme) {
+        document.documentElement.setAttribute('data-scheme', scheme);
+        localStorage.setItem('insighttrail_scheme', scheme);
+        document.getElementById('schemeSelect').value = scheme;
+        renderCharts();
+    }
+    function init() {
+        const storedScheme = localStorage.getItem('insighttrail_scheme') || 'catppuccin';
+        const storedTheme = localStorage.getItem('insighttrail_theme') || (storedScheme === 'catppuccin' ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-scheme', storedScheme);
+        document.documentElement.setAttribute('data-theme', storedTheme);
+        document.getElementById('schemeSelect').value = storedScheme;
+        renderCharts();
     }
 
     function formatUptime(seconds) { if (!seconds || seconds < 0) return '-'; const d=Math.floor(seconds/86400), h=Math.floor((seconds%86400)/3600), m=Math.floor((seconds%3600)/60); return `${d}d ${h}h ${m}m`; }
@@ -684,7 +796,7 @@
         const totalRows = orderedLogs.length, totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
         currentPage = Math.max(1, Math.min(currentPage, totalPages));
         const pageRows = orderedLogs.slice((currentPage-1)*pageSize, (currentPage-1)*pageSize + pageSize);
-        body.innerHTML = pageRows.map(log => {
+        body.innerHTML = pageRows.map((log, idx) => {
             const status = log.request?.status || 0, badgeClass = status >= 400 ? 'err' : 'ok';
             return `<tr>
                 <td class="px-3 py-2 whitespace-nowrap">${log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
@@ -694,10 +806,11 @@
                 <td class="px-3 py-2"><span class="status ${badgeClass}">${status || '-'}</span></td>
                 <td class="px-3 py-2">${(log.request?.duration_ms || 0).toFixed(2)}ms</td>
                 <td class="px-3 py-2">${log.request?.client || '-'}</td>
-                <td class="px-3 py-2"><button class="btn btn-ghost rounded-md px-2 py-1 text-xs" onclick='openDetails(${JSON.stringify(JSON.stringify(log))})'>View</button></td>
+                <td class="px-3 py-2"><button class="btn btn-ghost rounded-md px-2 py-1 text-xs" onclick="openDetails(${(currentPage-1)*pageSize+idx})">View</button></td>
             </tr>`;
         }).join('');
         const rows = body.querySelectorAll('tr');
+        pageRows.forEach((log, idx) => { logEntries[(currentPage-1)*pageSize+idx] = log; });
         pageRows.forEach((log, idx) => { if ((log.request?.status || 0) >= 400 && rows[idx]) rows[idx].classList.add('error-row'); });
         document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages}`;
         document.getElementById('prevPageBtn').disabled = currentPage <= 1; document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
@@ -769,7 +882,7 @@
         finally { setExportButtonLoading(false); }
     }
 
-    function openDetails(logJsonString){
+    function openDetails(index){
         const modal = document.getElementById('logModal');
         const loading = document.getElementById('modalLoading');
         const content = document.getElementById('modalContentWrap');
@@ -778,7 +891,7 @@
         content.style.display = 'none';
 
         window.setTimeout(() => {
-            const log = JSON.parse(logJsonString);
+            const log = logEntries[index] || {};
             document.getElementById('modalRequest').textContent = JSON.stringify(log.request || {}, null, 2);
             document.getElementById('modalError').textContent = JSON.stringify(log.error || {message:'No error'}, null, 2);
             document.getElementById('modalRuntime').textContent = JSON.stringify(log.runtime || {message:'Runtime capture disabled'}, null, 2);
@@ -799,11 +912,12 @@
 
     function chartColors(){
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const isCat = document.documentElement.getAttribute('data-scheme') === 'catppuccin';
         return {
-            axis: isDark ? '#9ca3af' : '#64748b',
-            latency: '#f97316',
-            cpu: '#16a34a',
-            mem: '#dc2626'
+            axis: isDark ? '#a6adc8' : '#6c6f85',
+            latency: isCat ? '#5488e0' : '#f97316',
+            cpu: isCat ? '#40a02b' : '#16a34a',
+            mem: isCat ? '#d20f39' : '#dc2626'
         };
     }
     function createOrUpdatePlot(el, plot, series, data){ const c = chartColors(); const options={ width: el.clientWidth || 520, height: 220, series, scales:{x:{time:false}}, axes:[{stroke:c.axis},{stroke:c.axis}], legend:{show:true} }; if(!plot) return new uPlot(options,data,el); plot.setData(data); return plot; }
@@ -817,7 +931,7 @@
 
     async function refreshAll(){ if(searchMode||isPollingPaused) return; try { setRefreshing(true); const response=await fetch(`${insightBaseUrl}/api/analytics/logs?limit=150&cursor=${encodeURIComponent(logCursor)}`), payload=await response.json(); const incoming=payload.logs||[]; if(logCursor&&incoming.length) logs=logs.concat(incoming); else if(!logCursor){ logs=incoming; currentPage=1; } if(logs.length>500) logs=logs.slice(logs.length-500); metrics=payload.metrics||null; loggerStats=payload.logger||null; logCursor=Number(payload.cursor||logCursor||0); updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); document.getElementById('lastRefresh').textContent=`(last refreshed ${new Date().toLocaleTimeString()})`; } catch(e){ console.error('Failed loading logs', e); } finally { setRefreshing(false); } }
 
-    async function searchLogs(){ const traceId=document.getElementById('traceInput').value.trim(); if(!traceId){ searchMode=false; logCursor=0; refreshAll(); return; } try { setRefreshing(true); searchMode=true; const response=await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`), payload=await response.json(); logs=payload.logs||[]; currentPage=1; metrics=payload.metrics||null; loggerStats=payload.logger||null; updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); if(logs.length>0) openDetails(JSON.stringify(logs[0])); else showCopyToast('No logs found for that trace ID'); } catch(e){ console.error('Search failed', e); } finally { setRefreshing(false); } }
+    async function searchLogs(){ const traceId=document.getElementById('traceInput').value.trim(); if(!traceId){ searchMode=false; logCursor=0; refreshAll(); return; } try { setRefreshing(true); searchMode=true; const response=await fetch(`${insightBaseUrl}/api/analytics/search?trace_id=${encodeURIComponent(traceId)}`), payload=await response.json(); logs=payload.logs||[]; currentPage=1; metrics=payload.metrics||null; loggerStats=payload.logger||null; updateResourceTrend(); renderMetrics(); applyLogFilters(); renderCharts(); if(logs.length>0){ logEntries[0]=logs[0]; openDetails(0); } else showCopyToast('No logs found for that trace ID'); } catch(e){ console.error('Search failed', e); } finally { setRefreshing(false); } }
 
     window.addEventListener('resize', ()=>{ if(latencyPlot||resourcePlot) renderCharts(); });
     function startPolling(){ if(refreshTimerId!==null) return; refreshTimerId=setInterval(()=>refreshAll(), uiRefreshSeconds*1000); }
@@ -825,7 +939,7 @@
     function handleVisibilityChange(){ const hidden=document.visibilityState==='hidden'; isPollingPaused=hidden; if(hidden){ stopPolling(); return; } refreshAll(); startPolling(); }
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    initTheme();
+    init();
     refreshAll(); refreshPackages(); toggleClearButton(); startPolling();
 </script>
 </body>

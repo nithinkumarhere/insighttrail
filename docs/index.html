@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InsightTrail — Observability for Python Web Services</title>
+  <meta name="description" content="Lightweight observability middleware for Flask and FastAPI with request tracing, structured JSON logs, metrics, and a built-in dashboard.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Lexend:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ── Catppuccin Mocha (dark) ── */
+    [data-theme="dark"] {
+      --cat-base: #1e1e2e;
+      --cat-mantle: #181825;
+      --cat-crust: #11111b;
+      --cat-surface0: #313244;
+      --cat-surface1: #45475a;
+      --cat-surface2: #585b70;
+      --cat-overlay0: #6c7086;
+      --cat-overlay1: #7f849c;
+      --cat-overlay2: #9399b2;
+      --cat-subtext0: #a6adc8;
+      --cat-subtext1: #bac2de;
+      --cat-text: #cdd6f4;
+      --cat-lavender: #b4befe;
+      --cat-blue: #89b4fa;
+      --cat-sapphire: #74c7ec;
+      --cat-sky: #89dceb;
+      --cat-teal: #94e2d5;
+      --cat-green: #a6e3a1;
+      --cat-yellow: #f9e2af;
+      --cat-peach: #fab387;
+      --cat-maroon: #eba0ac;
+      --cat-red: #f38ba8;
+      --cat-mauve: #cba6f7;
+      --cat-blue-rgb: 84, 136, 224;
+      --cat-overlay2-rgb: 147, 155, 178;
+      --cat-surface0-rgb: 49, 50, 68;
+      --accent: var(--cat-blue);
+      --accent-hover: var(--cat-blue);
+      --pico-primary: var(--cat-blue);
+      --pico-primary-hover: var(--cat-blue);
+      --pico-primary-background: var(--cat-blue);
+      --pico-primary-hover-background: var(--cat-blue);
+      --pico-primary-underline: rgba(var(--cat-blue-rgb), 0.35);
+    }
+
+    /* ── Catppuccin Latte (light) ── */
+    [data-theme="light"] {
+      --cat-base: #eff1f5;
+      --cat-mantle: #e6e9ef;
+      --cat-crust: #dce0e8;
+      --cat-surface0: #ccd0da;
+      --cat-surface1: #bcc0cc;
+      --cat-surface2: #acb0be;
+      --cat-overlay0: #9ca0b0;
+      --cat-overlay1: #8c8fa1;
+      --cat-overlay2: #7c7f93;
+      --cat-subtext0: #6c6f85;
+      --cat-subtext1: #5c5f77;
+      --cat-text: #4c4f69;
+      --cat-lavender: #7287fd;
+      --cat-blue: #5488e0;
+      --cat-sapphire: #209fb5;
+      --cat-sky: #04a5e5;
+      --cat-teal: #179299;
+      --cat-green: #40a02b;
+      --cat-yellow: #df8e1d;
+      --cat-peach: #fe640b;
+      --cat-maroon: #e64553;
+      --cat-red: #d20f39;
+      --cat-mauve: #8839ef;
+      --cat-blue-rgb: 84, 136, 224;
+      --cat-overlay2-rgb: 124, 127, 147;
+      --cat-surface0-rgb: 204, 208, 218;
+      --accent: var(--cat-blue);
+      --accent-hover: var(--cat-blue);
+      --pico-primary: var(--cat-blue);
+      --pico-primary-hover: var(--cat-blue);
+      --pico-primary-background: var(--cat-blue);
+      --pico-primary-hover-background: var(--cat-blue);
+      --pico-primary-underline: rgba(var(--cat-blue-rgb), 0.35);
+    }
+
+    /* ── shared semantic tokens ── */
+    [data-theme] {
+      --bg-base: var(--cat-base);
+      --bg-card: var(--cat-surface0);
+      --bg-code: var(--cat-mantle);
+      --bg-hover: var(--cat-surface1);
+      --text-primary: var(--cat-text);
+      --text-secondary: var(--cat-subtext0);
+      --text-muted: var(--cat-subtext1);
+      --border: var(--cat-surface1);
+      --accent-green: var(--cat-green);
+      --accent-peach: var(--cat-peach);
+      --accent-mauve: var(--cat-mauve);
+      --accent-red: var(--cat-red);
+      --accent-teal: var(--cat-teal);
+
+      /* Pico overrides */
+      --pico-background-color: var(--cat-base);
+      --pico-color: var(--cat-text);
+      --pico-text-selection-color: rgba(var(--cat-overlay2-rgb), 0.25);
+      --pico-card-background-color: var(--cat-surface0);
+      --pico-card-border-color: var(--cat-surface1);
+      --pico-code-background-color: var(--cat-mantle);
+      --pico-code-color: var(--cat-text);
+      --pico-table-border-color: var(--cat-surface1);
+      --pico-table-row-stripped-background-color: rgba(var(--cat-surface0-rgb), 0.5);
+      --pico-font-family: 'Lexend', sans-serif;
+      --pico-font-family-monospace: 'DM Mono', monospace;
+    }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, h4 {
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      margin: 0;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    h3 {
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    code, pre {
+      font-family: 'DM Mono', monospace;
+    }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1024px;
+    }
+
+    /* ─── Theme Toggle ─── */
+    .theme-toggle {
+      position: fixed;
+      top: 1.25rem;
+      right: 1.25rem;
+      z-index: 100;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 2.75rem;
+      height: 2.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.2rem;
+      color: var(--text-primary);
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      transform: scale(1.05);
+    }
+
+    .theme-toggle .icon-light,
+    .theme-toggle .icon-dark {
+      line-height: 1;
+    }
+
+    [data-theme="dark"] .theme-toggle .icon-light { display: inline; }
+    [data-theme="dark"] .theme-toggle .icon-dark { display: none; }
+    [data-theme="light"] .theme-toggle .icon-light { display: none; }
+    [data-theme="light"] .theme-toggle .icon-dark { display: inline; }
+
+    /* ─── Hero ─── */
+    .hero {
+      padding: 4rem 0 3rem;
+      text-align: center;
+    }
+
+    .hero h1 .highlight {
+      color: var(--accent-teal);
+    }
+
+    .hero .tagline {
+      font-size: clamp(1rem, 1.5vw, 1.2rem);
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 1rem auto 1.5rem;
+      line-height: 1.7;
+    }
+
+    .hero .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+
+    .hero .badges img {
+      height: 24px;
+      border-radius: 6px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .hero-actions a {
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 10px;
+      transition: all 0.2s;
+      text-decoration: none;
+    }
+
+    .hero-actions .btn-primary {
+      background: var(--accent);
+      color: var(--cat-base);
+      border: 1px solid var(--accent);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .hero-actions .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .hero-actions .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .hero-actions .btn-secondary:hover {
+      transform: translateY(-2px);
+    }
+
+    /* ─── Section Styling ─── */
+    section {
+      padding: 3rem 0;
+    }
+
+    section h2 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    section .section-sub {
+      text-align: center;
+      color: var(--text-secondary);
+      margin-bottom: 3rem;
+      font-size: 1.05rem;
+    }
+
+    /* ─── Features ─── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem 1.5rem;
+      transition: all 0.25s;
+    }
+
+    .feature-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .feature-card .icon {
+      font-size: 1.6rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .feature-card p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    /* ─── Quick Start Code Tabs ─── */
+    .code-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-tabs .tab {
+      padding: 0.65rem 1.5rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-muted);
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      transition: all 0.2s;
+      background: transparent;
+    }
+
+    .code-tabs .tab.active {
+      color: var(--text-primary);
+      background: var(--bg-code);
+      border-color: var(--border);
+      position: relative;
+    }
+
+    .code-tabs .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .code-tabs .tab:not(.active):hover {
+      color: var(--text-secondary);
+    }
+
+    .code-panel {
+      display: none;
+    }
+
+    .code-panel.active {
+      display: block;
+    }
+
+    .code-panel pre {
+      border-top-left-radius: 0;
+      margin-top: 0;
+    }
+
+    /* ─── Screenshot ─── */
+    .screenshot-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.25s;
+    }
+
+    .screenshot-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .screenshot-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+      box-shadow: inset 0 0 0 20px rgba(var(--cat-blue-rgb), 0.35);
+      border-radius: 0 0 15px 15px;
+      transform: scale(1.01);
+      transform-origin: center center;
+      transition: transform 0.4s ease;
+    }
+
+    .screenshot-card:hover img {
+      transform: scale(1.4);
+    }
+
+    .window-chrome {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg-code);
+      border-bottom: 1px solid var(--border);
+      border-radius: 15px 15px 0 0;
+    }
+
+    .window-chrome .title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    .window-chrome .dots {
+      display: flex;
+      gap: 0.4rem;
+      margin-left: auto;
+    }
+
+    .window-chrome .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .window-chrome .dot.red { background: var(--cat-red); }
+    .window-chrome .dot.yellow { background: var(--cat-yellow); }
+    .window-chrome .dot.green { background: var(--cat-green); }
+
+    .window-chrome .window-title {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-left: 0.5rem;
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ─── Config Table ─── */
+    .config-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .config-table-wrap table {
+      margin: 0;
+      font-size: 0.85rem;
+    }
+
+    .config-table-wrap th {
+      background: var(--bg-card);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      padding: 0.9rem 1rem;
+    }
+
+    .config-table-wrap td {
+      padding: 0.75rem 1rem;
+      border-color: var(--border);
+      color: var(--text-primary);
+    }
+
+    .config-table-wrap td:first-child {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .config-table-wrap td:nth-child(2) {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      margin-top: auto;
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    footer .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ─── Accessibility ─── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+
+    .hero-actions a:focus-visible,
+    .tab:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .skip-link {
+      position: absolute;
+      top: -100%;
+      left: 1rem;
+      background: var(--accent);
+      color: var(--cat-base);
+      padding: 0.5rem 1rem;
+      border-radius: 0 0 8px 8px;
+      z-index: 200;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 600px) {
+      .hero { padding: 2.5rem 0 2rem; }
+      section { padding: 2rem 0; }
+      .features-grid { grid-template-columns: 1fr; }
+      .hero-actions a { width: 100%; text-align: center; }
+      .theme-toggle { top: 0.75rem; right: 0.75rem; width: 2.25rem; height: 2.25rem; font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+    <span class="icon-dark">☀️</span>
+    <span class="icon-light">🌙</span>
+  </button>
+
+  <main id="main-content">
+    <!-- ─── Hero ─── -->
+    <div class="hero">
+      <div class="container">
+        <div class="badges">
+          <img src="https://img.shields.io/pypi/pyversions/insighttrail?color=146C94&logo=python" alt="Python versions">
+          <img src="https://img.shields.io/pypi/l/insighttrail?color=4ade80" alt="License">
+          <img src="https://img.shields.io/pypi/v/insighttrail?color=19A7CE&logo=pypi" alt="PyPI version">
+          <img src="https://img.shields.io/badge/Flask-FastAPI-supported?color=0A2647" alt="Flask + FastAPI">
+        </div>
+
+        <h1>Insight<span class="highlight">Trail</span></h1>
+        <p class="tagline">
+          Lightweight observability for Python web services.<br>
+          Request tracing, structured JSON logs, real-time metrics, and a live dashboard — one import away.
+        </p>
+
+        <div class="hero-actions">
+          <a href="#quickstart" class="btn-primary">Get Started</a>
+          <a href="https://github.com/insightTrail/insighttrail" class="btn-secondary" target="_blank">View on GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Features ─── -->
+    <section id="features">
+      <div class="container">
+        <h2>Everything you need, nothing you don't</h2>
+        <p class="section-sub">Drop-in observability that stays out of your way.</p>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <span class="icon">🔗</span>
+            <h3>Request Tracing</h3>
+            <p>Every request gets a unique <code>trace_id</code> — correlate logs across your entire request lifecycle.</p>
+          </div>
+          <div class="feature-card">
+            <span class="icon">📄</span>
+            <h3>Structured JSON Logs</h3>
+            <p>Machine-readable logs with automatic rotation. Ship them to your log aggregator of choice.</p>
+          </div>
+          <div class="feature-card">
+            <span class="icon">📊</span>
+            <h3>Real-time Metrics</h3>
+            <p>Request rates, latency, error rates, process memory, CPU — all tracked with zero configuration.</p>
+          </div>
+          <div class="feature-card">
+            <span class="icon">📋</span>
+            <h3>Live Dashboard</h3>
+            <p>A built-in UI at <code>/insight</code> with logs, trend charts, and dependency status — no external services needed.</p>
+          </div>
+          <div class="feature-card">
+            <span class="icon">📦</span>
+            <h3>Dependency Tracker</h3>
+            <p>See installed packages vs. latest PyPI versions with stability labels and stale-detection badges.</p>
+          </div>
+          <div class="feature-card">
+            <span class="icon">📑</span>
+            <h3>Excel Reports</h3>
+            <p>Export filtered request logs, errors, and dependency data to <code>.xlsx</code> with preset or custom date ranges.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Quick Start ─── -->
+    <section id="quickstart">
+      <div class="container">
+        <h2>Quick Start</h2>
+        <p class="section-sub">Install, import, done.</p>
+
+        <div class="code-tabs" role="tablist">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="flask">Flask</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="fastapi">FastAPI</button>
+        </div>
+
+        <div class="code-panel active" id="panel-flask" role="tabpanel">
+          <pre><code><span style="color:var(--cat-green)"># install</span>
+<span style="color:var(--cat-overlay1)">$</span> pip install <span style="color:var(--cat-blue)">"insighttrail[flask]"</span>
+
+<span style="color:var(--cat-green)"># app.py</span>
+<span style="color:var(--cat-mauve)">from</span> flask <span style="color:var(--cat-mauve)">import</span> Flask
+<span style="color:var(--cat-mauve)">from</span> insighttrail <span style="color:var(--cat-mauve)">import</span> FlaskInsightTrail
+
+app <span style="color:var(--cat-mauve)">=</span> Flask(__name__)
+FlaskInsightTrail(app)
+
+@app.route(<span style="color:var(--cat-teal)">'/'</span>)
+<span style="color:var(--cat-mauve)">def</span> <span style="color:var(--cat-blue)">home</span>():
+    <span style="color:var(--cat-mauve)">return</span> <span style="color:var(--cat-teal)">'Hello from host app'</span></code></pre>
+        </div>
+
+        <div class="code-panel" id="panel-fastapi" role="tabpanel">
+          <pre><code><span style="color:var(--cat-green)"># install</span>
+<span style="color:var(--cat-overlay1)">$</span> pip install <span style="color:var(--cat-blue)">"insighttrail[fastapi]"</span>
+
+<span style="color:var(--cat-green)"># main.py</span>
+<span style="color:var(--cat-mauve)">from</span> fastapi <span style="color:var(--cat-mauve)">import</span> FastAPI
+<span style="color:var(--cat-mauve)">from</span> insighttrail <span style="color:var(--cat-mauve)">import</span> FlaskInsightTrail
+
+app <span style="color:var(--cat-mauve)">=</span> FastAPI()
+FlaskInsightTrail(app)
+
+@app.get(<span style="color:var(--cat-teal)">'/'</span>)
+<span style="color:var(--cat-mauve)">def</span> <span style="color:var(--cat-blue)">home</span>():
+    <span style="color:var(--cat-mauve)">return</span> {<span style="color:var(--cat-teal)">'message'</span>: <span style="color:var(--cat-teal)">'Hello from host app'}</span></code></pre>
+        </div>
+
+        <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem; text-align: center;">
+          Open <code>http://localhost:8000/insight/</code> — your dashboard is live.
+        </p>
+      </div>
+    </section>
+
+    <!-- ─── Dashboard Screenshot ─── -->
+    <section id="dashboard">
+      <div class="container">
+        <h2>Built-in Dashboard</h2>
+        <p class="section-sub">Real-time observability without leaving your app.</p>
+
+        <div class="screenshot-card">
+          <div class="window-chrome">
+            <span class="title">InsightTrail Dashboard</span>
+            <span class="dots">
+              <span class="dot green"></span>
+              <span class="dot yellow"></span>
+              <span class="dot red"></span>
+            </span>
+          </div>
+          <img id="dash-screenshot" src="dashboard-dark.png" alt="InsightTrail Dashboard">
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Configuration ─── -->
+    <section id="config">
+      <div class="container">
+        <h2>Configuration</h2>
+        <p class="section-sub">Sensible defaults, full control when you need it.</p>
+
+        <div class="config-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>url_prefix</td><td>'/insight'</td><td>Dashboard and API route prefix</td></tr>
+              <tr><td>log_level</td><td>'INFO'</td><td>Logging level (DEBUG, INFO, etc.)</td></tr>
+              <tr><td>capture_runtime</td><td>False</td><td>Include runtime info in logs</td></tr>
+              <tr><td>capture_system_metrics</td><td>False</td><td>Include per-request system metrics</td></tr>
+              <tr><td>async_logging</td><td>True</td><td>Non-blocking queue-based log writes</td></tr>
+              <tr><td>success_log_sample_rate</td><td>1.0</td><td>Sampling rate for successful requests</td></tr>
+              <tr><td>slow_request_threshold_ms</td><td>None</td><td>Always log requests slower than this</td></tr>
+              <tr><td>ultra_light_mode</td><td>False</td><td>Disables heavy features (charts, network checks)</td></tr>
+              <tr><td>enable_excel_reports</td><td>True</td><td>Enable Excel report export</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.85rem; text-align: center;">
+          <a href="https://github.com/insightTrail/insighttrail#configuration" style="color: var(--accent);">Full configuration reference →</a>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ─── Footer ─── -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/insightTrail/insighttrail" target="_blank">GitHub</a>
+        <a href="https://github.com/insightTrail/insighttrail/issues" target="_blank">Issues</a>
+        <a href="https://pypi.org/project/insighttrail/" target="_blank">PyPI</a>
+        <a href="https://github.com/insightTrail/insighttrail/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+      </div>
+      <p>MIT License &middot; InsightTrail v0.2.0</p>
+    </div>
+  </footer>
+
+  <script>
+    // code tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-selected', 'false');
+        });
+        document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+
+    // theme switcher
+    const html = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    const dashImg = document.getElementById('dash-screenshot');
+
+    function setTheme(theme) {
+      html.setAttribute('data-theme', theme);
+      localStorage.setItem('insighttrail-theme', theme);
+      if (dashImg) dashImg.src = theme === 'dark' ? 'dashboard-dark.png' : 'dashboard-light.png';
+    }
+
+    btn.addEventListener('click', () => {
+      const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      setTheme(next);
+    });
+
+    // init: prefer stored, then system, then dark
+    const stored = localStorage.getItem('insighttrail-theme');
+    let initTheme = 'dark';
+    if (stored) {
+      initTheme = stored;
+    } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      initTheme = 'light';
+    }
+    setTheme(initTheme);
+
+  </script>
+</body>
+</html>
