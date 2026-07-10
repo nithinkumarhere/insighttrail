@@ -25,7 +25,7 @@ class _FastAPIInsightMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, capture_runtime=False, capture_system_metrics=False,
                  capture_env_vars=False, env_allowlist=None, url_prefix='/insight',
                  track_internal_requests=False, success_log_sample_rate=1.0,
-                 slow_request_threshold_ms=None):
+                 slow_request_threshold_ms=None, trace_id=None):
         super().__init__(app)
         self.capture_runtime = capture_runtime
         self.capture_system_metrics = capture_system_metrics
@@ -35,10 +35,11 @@ class _FastAPIInsightMiddleware(BaseHTTPMiddleware):
         self.track_internal_requests = track_internal_requests
         self.success_log_sample_rate = max(0.0, min(1.0, float(success_log_sample_rate)))
         self.slow_request_threshold_ms = float(slow_request_threshold_ms) if slow_request_threshold_ms is not None else None
+        self.trace_id = trace_id
 
     async def dispatch(self, request, call_next):
         start_time = time.time()
-        trace_id = str(uuid.uuid4())
+        trace_id = (request.get_json(silent=True) or {}).get(self.trace_id) or str(uuid.uuid4())
         request.state.trace_id = trace_id
         is_internal = request.url.path.startswith(self.url_prefix)
 
@@ -105,7 +106,7 @@ class FastAPIInsightTrail:
                  dependency_cache_ttl_seconds=21600, dependency_async_refresh=True,
                  dependency_request_timeout=2, enable_excel_reports=True,
                  report_max_rows=200000, report_timezone='UTC',
-                 log_storage='file', db_config=None):
+                 log_storage='file', db_config=None, trace_id=None):
         self.app = app
         self.capture_runtime = capture_runtime
         self.capture_system_metrics = capture_system_metrics
@@ -131,6 +132,7 @@ class FastAPIInsightTrail:
         self.required_packages = self._load_required_packages(os.getcwd())
         self._dependency_cache = {}
         self._dependency_refresh_in_progress = False
+        self.trace_id = trace_id
 
         if self.log_storage == 'file' and log_file is None:
             log_file = os.path.join(os.getcwd(), 'logs', 'insighttrail.log')
@@ -161,6 +163,7 @@ class FastAPIInsightTrail:
             track_internal_requests=self.track_internal_requests,
             success_log_sample_rate=self.success_log_sample_rate,
             slow_request_threshold_ms=self.slow_request_threshold_ms,
+            trace_id=self.trace_id,
         )
 
         if enable_ui:

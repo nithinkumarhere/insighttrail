@@ -2,6 +2,7 @@ from flask import request, g, jsonify, render_template, Blueprint, send_file
 import time
 import os
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from .logger import setup_logger, log_request, log_error, get_logger_stats, should_log_success
@@ -24,7 +25,7 @@ class FlaskInsightTrail:
                  dependency_cache_ttl_seconds=21600, dependency_async_refresh=True,
                  dependency_request_timeout=2, enable_excel_reports=True,
                  report_max_rows=200000, report_timezone='UTC',
-                 log_storage='file', db_config=None):
+                 log_storage='file', db_config=None, trace_id=None):
         """
         Initialize InsightTrail middleware.
 
@@ -63,6 +64,7 @@ class FlaskInsightTrail:
         self.required_packages = self._load_required_packages(app.root_path)
         self._dependency_cache = {}
         self._dependency_refresh_in_progress = False
+        self.trace_id = trace_id
 
         if self.log_storage == 'file' and log_file is None:
             # Default to a 'logs' directory in the parent of the app's root path
@@ -226,7 +228,8 @@ class FlaskInsightTrail:
         @app.before_request
         def before_request():
             g.start_time = time.time()
-            trace_request(request)
+            trace_id = (request.get_json(silent=True) or {}).get(self.trace_id) or str(uuid.uuid4())
+            trace_request(request, trace_id)
 
         @app.after_request
         def after_request(response):
