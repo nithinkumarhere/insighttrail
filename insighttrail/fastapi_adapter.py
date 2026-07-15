@@ -39,7 +39,14 @@ class _FastAPIInsightMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request, call_next):
         start_time = time.time()
-        trace_id = (request.get_json(silent=True) or {}).get(self.trace_id) or str(uuid.uuid4())
+        trace_id = str(uuid.uuid4())
+        if self.trace_id:
+            try:
+                body = await request.json()
+                if isinstance(body, dict) and self.trace_id in body:
+                    trace_id = body[self.trace_id]
+            except Exception:
+                pass
         request.state.trace_id = trace_id
         is_internal = request.url.path.startswith(self.url_prefix)
 

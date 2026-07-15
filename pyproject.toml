@@ -38,6 +38,7 @@ flask = [
 ]
 fastapi = [
     "fastapi>=0.100.0",
+    "jinja2",
 ]
 
 [project.urls]
