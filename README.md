@@ -13,6 +13,7 @@ from insighttrail import FlaskInsightTrail
 ```
 
 ## What Is New
+- Custom trace_id key support — pass a JSON request body field name to use as `trace_id` instead of auto-generating
 - Common API for Flask and FastAPI (`FlaskInsightTrail(app, ...)`)
 - Dashboard is isolated to `url_prefix` (default `/insight`) and no longer collides with host app `/`
 - Lightweight UI stack: Milligram + uPlot (removed Bootstrap, DataTables, jQuery, Chart.js)
@@ -123,6 +124,7 @@ FlaskInsightTrail(
     enable_excel_reports=True,
     report_max_rows=200000,
     report_timezone='UTC',
+    trace_id=None,
 )
 ```
 
@@ -186,6 +188,7 @@ FlaskInsightTrail(
 | `dependency_request_timeout` | `int` | `2` | Timeout (seconds) for each dependency metadata request. |
 | `enable_excel_reports` | `bool` | `True` | Enable Excel report export endpoint and UI action. |
 | `report_max_rows` | `int` | `200000` | Maximum rows included in a generated report. |
+| `trace_id` | `str` | `None` | `None` | JSON request body field name to use as `trace_id`. When set, the adapter looks for this key in the JSON body; falls back to auto-generated UUID if not found or body is not valid JSON. |
 | `report_timezone` | `str` | `'UTC'` | Report time basis label (current implementation uses UTC). |
 
 ## Dashboard
